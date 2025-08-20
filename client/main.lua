@@ -1,4 +1,5 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+ESX = exports['es_extended']:getSharedObject()
+local PlayerData = {}
 local PlayerJob = {}
 local patt = '[?!@#]'
 local frontCam = false
@@ -77,23 +78,28 @@ local function CalculateTimeToDisplay()
 end
 
 local function GetClosestPlayer()
-    local closestPlayers = QBCore.Functions.GetPlayersFromCoords()
-    local closestDistance = -1
+    local players = GetActivePlayers()
     local closestPlayer = -1
-    local coords = GetEntityCoords(PlayerPedId())
-    for i = 1, #closestPlayers, 1 do
-        if closestPlayers[i] ~= PlayerId() then
-            local pos = GetEntityCoords(GetPlayerPed(closestPlayers[i]))
-            local distance = #(pos - coords)
+    local closestDistance = -1
+    local ply = PlayerPedId()
+    local plyCoords = GetEntityCoords(ply)
 
-            if closestDistance == -1 or closestDistance > distance then
-                closestPlayer = closestPlayers[i]
-                closestDistance = distance
+    for _, playerId in ipairs(players) do
+        local targetPed = GetPlayerPed(playerId)
+        if targetPed ~= ply then
+            local targetCoords = GetEntityCoords(targetPed)
+            local dist = #(plyCoords - targetCoords)
+
+            if closestDistance == -1 or dist < closestDistance then
+                closestPlayer = playerId
+                closestDistance = dist
             end
         end
     end
+
     return closestPlayer, closestDistance
 end
+
 
 local function GetKeyByDate(Number, Date)
     local retval = nil
@@ -134,18 +140,20 @@ local function ReorganizeChats(key)
 end
 
 local function findVehFromPlateAndLocate(plate)
-    local gameVehicles = QBCore.Functions.GetVehicles()
-    for i = 1, #gameVehicles do
-        local vehicle = gameVehicles[i]
+    local vehicles = GetGamePool('CVehicle')
+    for _, vehicle in pairs(vehicles) do
         if DoesEntityExist(vehicle) then
-            if QBCore.Functions.GetPlate(vehicle) == plate then
+            local vehiclePlate = string.gsub(GetVehicleNumberPlateText(vehicle), "^%s*(.-)%s*$", "%1") -- trim whitespace
+            if vehiclePlate == plate then
                 local vehCoords = GetEntityCoords(vehicle)
                 SetNewWaypoint(vehCoords.x, vehCoords.y)
                 return true
             end
         end
     end
+    return false
 end
+
 
 local function DisableDisplayControlActions()
     DisableControlAction(0, 1, true)   -- disable mouse look
@@ -170,13 +178,17 @@ end
 
 local function LoadPhone()
     Wait(100)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetPhoneData', function(pData)
-        PlayerJob = QBCore.Functions.GetPlayerData().job
-        PhoneData.PlayerData = QBCore.Functions.GetPlayerData()
-        local PhoneMeta = PhoneData.PlayerData.metadata['phone']
+    ESX.TriggerServerCallback('esx_phone:server:GetPhoneData', function(pData)
+        PlayerData = ESX.GetPlayerData()
+        PlayerJob = PlayerData.job
+        PhoneData.PlayerData = PlayerData
+
+        -- Gunakan xPlayer.get('phone') di server untuk metadata jika tersedia
+        local PhoneMeta = pData.PhoneMeta or {}
         PhoneData.MetaData = PhoneMeta
 
-        if pData.InstalledApps ~= nil and next(pData.InstalledApps) ~= nil then
+        -- Load Aplikasi
+        if pData.InstalledApps then
             for _, v in pairs(pData.InstalledApps) do
                 local AppData = Config.StoreApps[v.app]
                 Config.PhoneApplications[v.app] = {
@@ -193,77 +205,56 @@ local function LoadPhone()
             end
         end
 
-        if PhoneMeta.profilepicture == nil then
-            PhoneData.MetaData.profilepicture = 'default'
-        else
-            PhoneData.MetaData.profilepicture = PhoneMeta.profilepicture
-        end
+        -- Set profile picture
+        PhoneData.MetaData.profilepicture = PhoneMeta.profilepicture or 'default'
 
-        if pData.Applications ~= nil and next(pData.Applications) ~= nil then
+        -- Alerts & Contacts
+        if pData.Applications then
             for k, v in pairs(pData.Applications) do
                 Config.PhoneApplications[k].Alerts = v
             end
         end
 
-        if pData.MentionedTweets ~= nil and next(pData.MentionedTweets) ~= nil then
-            PhoneData.MentionedTweets = pData.MentionedTweets
-        end
+        PhoneData.Contacts = pData.PlayerContacts or {}
+        PhoneData.MentionedTweets = pData.MentionedTweets or {}
+        PhoneData.Tweets = pData.Tweets or {}
+        PhoneData.Chats = {}
 
-        if pData.PlayerContacts ~= nil and next(pData.PlayerContacts) ~= nil then
-            PhoneData.Contacts = pData.PlayerContacts
-        end
-
-        if pData.Chats ~= nil and next(pData.Chats) ~= nil then
-            local Chats = {}
+        if pData.Chats then
             for _, v in pairs(pData.Chats) do
-                Chats[v.number] = {
+                PhoneData.Chats[v.number] = {
                     name = IsNumberInContacts(v.number),
                     number = v.number,
-                    messages = json.decode(v.messages)
+                    messages = json.decode(v.messages),
                 }
             end
-
-            PhoneData.Chats = Chats
         end
 
-        if pData.Hashtags ~= nil and next(pData.Hashtags) ~= nil then
-            PhoneData.Hashtags = pData.Hashtags
-        end
+        -- Sisanya
+        PhoneData.Hashtags = pData.Hashtags or {}
+        PhoneData.Mails = pData.Mails or {}
+        PhoneData.Adverts = pData.Adverts or {}
+        PhoneData.CryptoTransactions = pData.CryptoTransactions or {}
+        PhoneData.Images = pData.Images or {}
 
-        if pData.Tweets ~= nil and next(pData.Tweets) ~= nil then
-            PhoneData.Tweets = pData.Tweets
-        end
-
-        if pData.Mails ~= nil and next(pData.Mails) ~= nil then
-            PhoneData.Mails = pData.Mails
-        end
-
-        if pData.Adverts ~= nil and next(pData.Adverts) ~= nil then
-            PhoneData.Adverts = pData.Adverts
-        end
-
-        if pData.CryptoTransactions ~= nil and next(pData.CryptoTransactions) ~= nil then
-            PhoneData.CryptoTransactions = pData.CryptoTransactions
-        end
-        if pData.Images ~= nil and next(pData.Images) ~= nil then
-            PhoneData.Images = pData.Images
-        end
-
+        -- Kirim ke UI
         SendNUIMessage({
             action = 'LoadPhoneData',
             PhoneData = PhoneData,
             PlayerData = PhoneData.PlayerData,
-            PlayerJob = PhoneData.PlayerData.job,
+            PlayerJob = PlayerJob,
             applications = Config.PhoneApplications,
             PlayerId = GetPlayerServerId(PlayerId())
         })
     end)
 end
 
+
 local function OpenPhone()
-    QBCore.Functions.TriggerCallback('qb-phone:server:HasPhone', function(HasPhone)
+    ESX.TriggerServerCallback('esx_phone:server:HasPhone', function(HasPhone)
         if HasPhone then
-            PhoneData.PlayerData = QBCore.Functions.GetPlayerData()
+            PhoneData.PlayerData = ESX.GetPlayerData()
+
             SetNuiFocus(true, true)
             SendNUIMessage({
                 action = 'open',
@@ -272,6 +263,7 @@ local function OpenPhone()
                 CallData = PhoneData.CallData,
                 PlayerData = PhoneData.PlayerData,
             })
+
             PhoneData.isOpen = true
 
             CreateThread(function()
@@ -281,24 +273,17 @@ local function OpenPhone()
                 end
             end)
 
-            if not PhoneData.CallData.InCall then
-                DoPhoneAnimation('cellphone_text_in')
-            else
-                DoPhoneAnimation('cellphone_call_to_text')
-            end
-
+            -- Animasi buka HP
+            DoPhoneAnimation('cellphone_text_in')
             SetTimeout(250, function()
                 newPhoneProp()
             end)
-
-            QBCore.Functions.TriggerCallback('qb-garages:server:GetPlayerVehicles', function(vehicles)
-                PhoneData.GarageVehicles = vehicles
-            end)
         else
-            QBCore.Functions.Notify("You don't have a phone", 'error')
+            TriggerEvent('esx:showNotification', 'You don\'t have a phone')
         end
     end)
 end
+
 
 local function GenerateCallId(caller, target)
     local CallId = math.ceil(((tonumber(caller) + tonumber(target)) / 100 * 1))
@@ -451,12 +436,12 @@ end
 -- Command
 
 RegisterCommand('phone', function()
-    local PlayerData = QBCore.Functions.GetPlayerData()
-    if not PhoneData.isOpen and LocalPlayer.state.isLoggedIn then
-        if not PlayerData.metadata['ishandcuffed'] and not PlayerData.metadata['inlaststand'] and not PlayerData.metadata['isdead'] and not IsPauseMenuActive() then
+    PlayerData = ESX.GetPlayerData()
+    if not PhoneData.isOpen then
+        if not IsPauseMenuActive() then -- ESX tidak punya metadata seperti QBCore
             OpenPhone()
         else
-            QBCore.Functions.Notify('Action not available at the moment..', 'error')
+            TriggerEvent('esx:showNotification', 'Action not available at the moment...')
         end
     end
 end)
@@ -508,10 +493,11 @@ RegisterNUICallback('GetSuggestedContacts', function(_, cb)
 end)
 
 RegisterNUICallback('HasPhone', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:HasPhone', function(HasPhone)
-        cb(HasPhone)
+    ESX.TriggerServerCallback('esx_phone:server:HasPhone', function(hasPhone)
+        cb(hasPhone)
     end)
 end)
+
 
 RegisterNUICallback('SetupGarageVehicles', function(_, cb)
     cb(PhoneData.GarageVehicles)
@@ -580,7 +566,7 @@ end)
 
 RegisterNUICallback('GetProfilePicture', function(data, cb)
     local number = data.number
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetPicture', function(picture)
+    ESX.TriggerServerCallback('qb-phone:server:GetPicture', function(picture)
         cb(picture)
     end, number)
 end)
@@ -590,7 +576,7 @@ RegisterNUICallback('GetBankContacts', function(_, cb)
 end)
 
 RegisterNUICallback('GetInvoices', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetInvoices', function(resp)
+    ESX.TriggerServerCallback('qb-phone:server:GetInvoices', function(resp)
         cb(resp)
     end)
 end)
@@ -655,7 +641,7 @@ RegisterNUICallback('PayInvoice', function(data, cb)
     local society = data.society
     local amount = data.amount
     local invoiceId = data.invoiceId
-    QBCore.Functions.TriggerCallback('qb-phone:server:PayInvoice', function(resp)
+    ESX.TriggerServerCallback('qb-phone:server:PayInvoice', function(resp)
         cb(resp)
     end, society, amount, invoiceId, senderCitizenId)
     TriggerServerEvent('qb-phone:server:BillingEmail', data, true)
@@ -665,7 +651,7 @@ RegisterNUICallback('DeclineInvoice', function(data, cb)
     local society = data.society
     local amount = data.amount
     local invoiceId = data.invoiceId
-    QBCore.Functions.TriggerCallback('qb-phone:server:DeclineInvoice', function(resp)
+    ESX.TriggerServerCallback('qb-phone:server:DeclineInvoice', function(resp)
         cb(resp)
     end, society, amount, invoiceId)
     TriggerServerEvent('qb-phone:server:BillingEmail', data, false)
@@ -792,7 +778,7 @@ RegisterNUICallback('GetHashtags', function(_, cb)
 end)
 
 RegisterNUICallback('FetchSearchResults', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:FetchResult', function(result)
+    ESX.TriggerServerCallback('qb-phone:server:FetchResult', function(result)
         cb(result)
     end, data.input)
 end)
@@ -850,9 +836,9 @@ end)
 RegisterNUICallback('track-vehicle', function(data, cb)
     local veh = data.veh
     if findVehFromPlateAndLocate(veh.plate) then
-        QBCore.Functions.Notify('Your vehicle has been marked', 'success')
+        ESX.ShowNotification('Your vehicle has been marked')
     else
-        QBCore.Functions.Notify('This vehicle cannot be located', 'error')
+        ESX.ShowNotification('This vehicle cannot be located', 'error')
     end
     cb('ok')
 end)
@@ -887,25 +873,25 @@ RegisterNUICallback('DeleteContact', function(data, cb)
 end)
 
 RegisterNUICallback('GetCryptoData', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-crypto:server:GetCryptoData', function(CryptoData)
+    ESX.TriggerServerCallback('qb-crypto:server:GetCryptoData', function(CryptoData)
         cb(CryptoData)
     end, data.crypto)
 end)
 
 RegisterNUICallback('BuyCrypto', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-crypto:server:BuyCrypto', function(CryptoData)
+    ESX.TriggerServerCallback('qb-crypto:server:BuyCrypto', function(CryptoData)
         cb(CryptoData)
     end, data)
 end)
 
 RegisterNUICallback('SellCrypto', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-crypto:server:SellCrypto', function(CryptoData)
+    ESX.TriggerServerCallback('qb-crypto:server:SellCrypto', function(CryptoData)
         cb(CryptoData)
     end, data)
 end)
 
 RegisterNUICallback('TransferCrypto', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-crypto:server:TransferCrypto', function(CryptoData)
+    ESX.TriggerServerCallback('qb-crypto:server:TransferCrypto', function(CryptoData)
         cb(CryptoData)
     end, data)
 end)
@@ -918,7 +904,7 @@ RegisterNUICallback('GetCryptoTransactions', function(_, cb)
 end)
 
 RegisterNUICallback('GetAvailableRaces', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:GetRaces', function(Races)
+    ESX.TriggerServerCallback('qb-lapraces:server:GetRaces', function(Races)
         cb(Races)
     end)
 end)
@@ -940,7 +926,7 @@ end)
 
 RegisterNUICallback('SetAlertWaypoint', function(data, cb)
     local coords = data.alert.coords
-    QBCore.Functions.Notify('GPS Location set: ' .. data.alert.title)
+    TriggerEvent('esx:showNotification', 'GPS Location set: ' .. data.alert.title)
     SetNewWaypoint(coords.x, coords.y)
     cb('ok')
 end)
@@ -958,7 +944,7 @@ RegisterNUICallback('RemoveSuggestion', function(data, cb)
 end)
 
 RegisterNUICallback('FetchVehicleResults', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetVehicleSearchResults', function(result)
+    ESX.TriggerServerCallback('qb-phone:server:GetVehicleSearchResults', function(result)
         if result ~= nil then
             for k, _ in pairs(result) do
                 QBCore.Functions.TriggerCallback('police:IsPlateFlagged', function(flagged)
@@ -972,14 +958,16 @@ RegisterNUICallback('FetchVehicleResults', function(data, cb)
 end)
 
 RegisterNUICallback('FetchVehicleScan', function(_, cb)
-    local vehicle = QBCore.Functions.GetClosestVehicle()
-    local plate = QBCore.Functions.GetPlate(vehicle)
+    local playerPed = PlayerPedId()
+    local pos = GetEntityCoords(playerPed)
+    local vehicle, distance = ESX.Game.GetClosestVehicle(pos)
+    local plate = ESX.Game.GetVehicleProperties(vehicle).plate
     local vehname = GetDisplayNameFromVehicleModel(GetEntityModel(vehicle)):lower()
-    QBCore.Functions.TriggerCallback('qb-phone:server:ScanPlate', function(result)
-        QBCore.Functions.TriggerCallback('police:IsPlateFlagged', function(flagged)
+    ESX.TriggerServerCallback('qb-phone:server:ScanPlate', function(result)
+        ESX.TriggerServerCallback('police:IsPlateFlagged', function(flagged)
             result.isFlagged = flagged
-            if QBCore.Shared.Vehicles[vehname] ~= nil then
-                result.label = QBCore.Shared.Vehicles[vehname]['name']
+            if ESX.Game.VehicleModels[vehname] ~= nil then
+                result.label = ESX.Game.VehicleModels[vehname].name
             else
                 result.label = 'Unknown brand..'
             end
@@ -989,13 +977,13 @@ RegisterNUICallback('FetchVehicleScan', function(_, cb)
 end)
 
 RegisterNUICallback('GetRaces', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:GetListedRaces', function(Races)
+    ESX.TriggerServerCallback('qb-lapraces:server:GetListedRaces', function(Races)
         cb(Races)
     end)
 end)
 
 RegisterNUICallback('GetTrackData', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:GetTrackData', function(TrackData, CreatorData)
+    ESX.TriggerServerCallback('qb-lapraces:server:GetTrackData', function(TrackData, CreatorData)
         TrackData.CreatorData = CreatorData
         cb(TrackData)
     end, data.RaceId)
@@ -1007,7 +995,7 @@ RegisterNUICallback('SetupRace', function(data, cb)
 end)
 
 RegisterNUICallback('HasCreatedRace', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:HasCreatedRace', function(HasCreated)
+    ESX.TriggerServerCallback('qb-lapraces:server:HasCreatedRace', function(HasCreated)
         cb(HasCreated)
     end)
 end)
@@ -1018,7 +1006,7 @@ RegisterNUICallback('IsInRace', function(_, cb)
 end)
 
 RegisterNUICallback('IsAuthorizedToCreateRaces', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:IsAuthorizedToCreateRaces', function(IsAuthorized, NameAvailable)
+    ESX.TriggerServerCallback('qb-lapraces:server:IsAuthorizedToCreateRaces', function(IsAuthorized, NameAvailable)
         data = {
             IsAuthorized = IsAuthorized,
             IsBusy = exports['qb-lapraces']:IsInEditor(),
@@ -1034,13 +1022,13 @@ RegisterNUICallback('StartTrackEditor', function(data, cb)
 end)
 
 RegisterNUICallback('GetRacingLeaderboards', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:GetRacingLeaderboards', function(Races)
+    ESX.TriggerServerCallback('qb-lapraces:server:GetRacingLeaderboards', function(Races)
         cb(Races)
     end)
 end)
 
 RegisterNUICallback('RaceDistanceCheck', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:GetRacingData', function(RaceData)
+    ESX.TriggerServerCallback('qb-lapraces:server:GetRacingData', function(RaceData)
         local ped = PlayerPedId()
         local coords = GetEntityCoords(ped)
         local checkpointcoords = RaceData.Checkpoints[1].coords
@@ -1051,7 +1039,7 @@ RegisterNUICallback('RaceDistanceCheck', function(data, cb)
             end
             cb(true)
         else
-            QBCore.Functions.Notify('You\'re too far away from the race. GPS has been set to the race.', 'error', 5000)
+            ESX.ShowNotification('You\'re too far away from the race. GPS has been set to the race.', 'error', 5000)
             SetNewWaypoint(checkpointcoords.x, checkpointcoords.y)
             cb(false)
         end
@@ -1067,26 +1055,26 @@ RegisterNUICallback('IsBusyCheck', function(data, cb)
 end)
 
 RegisterNUICallback('CanRaceSetup', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-lapraces:server:CanRaceSetup', function(CanSetup)
+    ESX.TriggerServerCallback('qb-lapraces:server:CanRaceSetup', function(CanSetup)
         cb(CanSetup)
     end)
 end)
 
 RegisterNUICallback('GetPlayerHouses', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetPlayerHouses', function(Houses)
+    ESX.TriggerServerCallback('qb-phone:server:GetPlayerHouses', function(Houses)
         cb(Houses)
     end)
 end)
 
 RegisterNUICallback('GetPlayerKeys', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetHouseKeys', function(Keys)
+    ESX.TriggerServerCallback('qb-phone:server:GetHouseKeys', function(Keys)
         cb(Keys)
     end)
 end)
 
 RegisterNUICallback('SetHouseLocation', function(data, cb)
     SetNewWaypoint(data.HouseData.HouseData.coords.enter.x, data.HouseData.HouseData.coords.enter.y)
-    QBCore.Functions.Notify('GPS has been set to ' .. data.HouseData.HouseData.adress .. '!', 'success')
+    ESX.ShowNotification('GPS has been set to ' .. data.HouseData.HouseData.adress .. '!', 'success')
     cb('ok')
 end)
 
@@ -1101,20 +1089,20 @@ end)
 
 RegisterNUICallback('TransferCid', function(data, cb)
     local TransferedCid = data.newBsn
-    QBCore.Functions.TriggerCallback('qb-phone:server:TransferCid', function(CanTransfer)
+    ESX.TriggerServerCallback('qb-phone:server:TransferCid', function(CanTransfer)
         cb(CanTransfer)
     end, TransferedCid, data.HouseData)
 end)
 
 RegisterNUICallback('FetchPlayerHouses', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:MeosGetPlayerHouses', function(result)
+    ESX.TriggerServerCallback('qb-phone:server:MeosGetPlayerHouses', function(result)
         cb(result)
     end, data.input)
 end)
 
 RegisterNUICallback('SetGPSLocation', function(data, cb)
     SetNewWaypoint(data.coords.x, data.coords.y)
-    QBCore.Functions.Notify('GPS has been set!', 'success')
+    TriggerEvent('GPS has been set!', 'success')
     cb('ok')
 end)
 
@@ -1122,18 +1110,18 @@ RegisterNUICallback('SetApartmentLocation', function(data, cb)
     local ApartmentData = data.data.appartmentdata
     local TypeData = Apartments.Locations[ApartmentData.type]
     SetNewWaypoint(TypeData.coords.enter.x, TypeData.coords.enter.y)
-    QBCore.Functions.Notify('GPS has been set!', 'success')
+    TriggerEvent('GPS has been set!', 'success')
     cb('ok')
 end)
 
 RegisterNUICallback('GetCurrentLawyers', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetCurrentLawyers', function(lawyers)
+    ESX.TriggerServerCallback('qb-phone:server:GetCurrentLawyers', function(lawyers)
         cb(lawyers)
     end)
 end)
 
 RegisterNUICallback('SetupStoreApps', function(_, cb)
-    local PlayerData = QBCore.Functions.GetPlayerData()
+    local PlayerData = ESX.GetPlayerData()
     local data = {
         StoreApps = Config.StoreApps,
         PhoneData = PlayerData.metadata['phonedata']
@@ -1187,10 +1175,10 @@ end)
 RegisterNUICallback('CanTransferMoney', function(data, cb)
     local amount = tonumber(data.amountOf)
     local iban = data.sendTo
-    local PlayerData = QBCore.Functions.GetPlayerData()
+    local PlayerData = ESX.GetPlayerData()
 
     if (PlayerData.money.bank - amount) >= 0 then
-        QBCore.Functions.TriggerCallback('qb-phone:server:CanTransferMoney', function(Transferd)
+        ESX.TriggerServerCallback('qb-phone:server:CanTransferMoney', function(Transferd)
             if Transferd then
                 cb({ TransferedMoney = true, NewBalance = (PlayerData.money.bank - amount) })
             else
@@ -1204,13 +1192,13 @@ RegisterNUICallback('CanTransferMoney', function(data, cb)
 end)
 
 RegisterNUICallback('GetWhatsappChats', function(_, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetContactPictures', function(Chats)
+    ESX.TriggerServerCallback('qb-phone:server:GetContactPictures', function(Chats)
         cb(Chats)
     end, PhoneData.Chats)
 end)
 
 RegisterNUICallback('CallContact', function(data, cb)
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetCallState', function(CanCall, IsOnline, _)
+    ESX.TriggerServerCallback('qb-phone:server:GetCallState', function(CanCall, IsOnline, _)
         local status = {
             CanCall = CanCall,
             IsOnline = IsOnline,
@@ -1358,7 +1346,7 @@ RegisterNUICallback('SendMessage', function(data, cb)
         ReorganizeChats(NumberKey)
     end
 
-    QBCore.Functions.TriggerCallback('qb-phone:server:GetContactPicture', function(Chat)
+    ESX.TriggerServerCallback('qb-phone:server:GetContactPicture', function(Chat)
         SendNUIMessage({
             action = 'UpdateChat',
             chatData = Chat,
@@ -1391,7 +1379,7 @@ RegisterNUICallback('TakePhoto', function(_, cb)
         elseif IsControlJustPressed(1, 176) then -- TAKE.. PIC
             if Config.Fivemerr == true then
                 -- Fivemerr uploads via the server using screenshot-basic to further guard your API key.
-                return QBCore.Functions.TriggerCallback('qb-phone:server:UploadToFivemerr', function(fivemerrData)
+                return ESX.TriggerServerCallback('qb-phone:server:UploadToFivemerr', function(fivemerrData)
                     if fivemerrData == nil then
                         DestroyMobilePhone()
                         CellCamActivate(false, false)
@@ -1409,9 +1397,9 @@ RegisterNUICallback('TakePhoto', function(_, cb)
                 end)
             end
 
-            QBCore.Functions.TriggerCallback('qb-phone:server:GetWebhook', function(hook)
+            ESX.TriggerServerCallback('qb-phone:server:GetWebhook', function(hook)
                 if not hook then
-                    QBCore.Functions.Notify('Camera not setup', 'error')
+                    ESX.ShowNotification('Camera not setup', 'error')
                     return
                 end
 
@@ -1443,7 +1431,7 @@ end)
 
 RegisterCommand('ping', function(_, args)
     if not args[1] then
-        QBCore.Functions.Notify('You need to input a Player ID', 'error')
+        TriggerEvent('Notification', 'You need to input a Player ID', 'error')
     else
         TriggerServerEvent('qb-phone:server:sendPing', args[1])
     end
@@ -1451,11 +1439,11 @@ end, false)
 
 -- Handler Events
 
-RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+RegisterNetEvent('esx:playerLoaded', function()
     LoadPhone()
 end)
 
-RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
+RegisterNetEvent('esx:playerUnload', function()
     PhoneData = {
         MetaData = {},
         isOpen = false,
@@ -1755,7 +1743,7 @@ RegisterNetEvent('qb-phone:client:GetCalled', function(CallerNumber, CallId, Ano
         if not PhoneData.CallData.AnsweredCall then
             if RepeatCount + 1 ~= Config.CallRepeats + 1 then
                 if PhoneData.CallData.InCall then
-                    QBCore.Functions.TriggerCallback('qb-phone:server:HasPhone', function(HasPhone)
+                    ESX.TriggerServerCallback('qb-phone:server:HasPhone', function(HasPhone)
                         if HasPhone then
                             RepeatCount = RepeatCount + 1
                             TriggerServerEvent('InteractSound_SV:PlayOnSource', 'ringing', 0.2)
@@ -1851,7 +1839,7 @@ RegisterNetEvent('qb-phone:client:UpdateMessages', function(ChatMessages, Sender
             ReorganizeChats(NumberKey)
 
             Wait(100)
-            QBCore.Functions.TriggerCallback('qb-phone:server:GetContactPictures', function(Chats)
+            ESX.TriggerServerCallback('qb-phone:server:GetContactPictures', function(Chats)
                 SendNUIMessage({
                     action = 'UpdateChat',
                     chatData = Chats[GetKeyByNumber(SenderNumber)],
@@ -1911,7 +1899,7 @@ RegisterNetEvent('qb-phone:client:UpdateMessages', function(ChatMessages, Sender
             ReorganizeChats(NumberKey)
 
             Wait(100)
-            QBCore.Functions.TriggerCallback('qb-phone:server:GetContactPictures', function(Chats)
+            ESX.TriggerServerCallback('qb-phone:server:GetContactPictures', function(Chats)
                 SendNUIMessage({
                     action = 'UpdateChat',
                     chatData = Chats[GetKeyByNumber(SenderNumber)],
@@ -2089,7 +2077,7 @@ RegisterNetEvent('qb-phone:client:GiveContactDetails', function()
         local PlayerId = GetPlayerServerId(player)
         TriggerServerEvent('qb-phone:server:GiveContactDetails', PlayerId)
     else
-        QBCore.Functions.Notify('No one nearby!', 'error')
+        TriggerEvent('Notification', 'No one nearby!', 'error')
     end
 end)
 
@@ -2148,7 +2136,7 @@ CreateThread(function()
     while true do
         Wait(60000)
         if LocalPlayer.state.isLoggedIn then
-            QBCore.Functions.TriggerCallback('qb-phone:server:GetPhoneData', function(pData)
+            ESX.TriggerServerCallback('qb-phone:server:GetPhoneData', function(pData)
                 if pData.PlayerContacts ~= nil and next(pData.PlayerContacts) ~= nil then
                     PhoneData.Contacts = pData.PlayerContacts
                 end
