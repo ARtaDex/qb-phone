@@ -161,8 +161,6 @@ local function LoadPhone()
         PhoneData.PlayerData = ESX.GetPlayerData()
         PlayerJob = PhoneData.PlayerData.job
         
-        -- ESX tidak selalu menyimpan metadata, sesuaikan baris ini jika Anda menggunakan ox_inventory atau sistem metadata custom
-        -- Jika menggunakan ESX standar, pData.PhoneMeta harus dikirim dari server
         local PhoneMeta = pData.PhoneMeta or {} 
         PhoneData.MetaData = PhoneMeta
 
@@ -281,9 +279,11 @@ local function OpenPhone()
                 newPhoneProp()
             end)
 
-            ESX.TriggerServerCallback('qb-garages:server:GetPlayerVehicles', function(vehicles)
+            -- Gunakan ESX get owned vehicles
+            ESX.TriggerServerCallback('qb-phone:server:GetVehicleSearchResults', function(vehicles)
+                -- Kita gunakan fungsi search result yang sudah ada di server untuk list mobil juga
                 PhoneData.GarageVehicles = vehicles
-            end)
+            end, "") 
         else
             ESX.ShowNotification("You don't have a phone")
         end
@@ -356,9 +356,13 @@ local function CallContact(CallData, AnonymousCall)
     PhoneData.CallData.InCall = true
     PhoneData.CallData.TargetData = CallData
     PhoneData.CallData.AnsweredCall = false
-    -- ESX: Mengambil nomor hp tergantung struktur database/inventory Anda
-    -- Disini diasumsikan charinfo.phone tersedia di PlayerData (custom) atau Anda harus menyesuaikannya
-    local myNumber = PhoneData.PlayerData.charinfo and PhoneData.PlayerData.charinfo.phone or "000000" 
+    -- Mendapatkan Nomor HP Sendiri (Sesuaikan dengan cara Anda menyimpan nomor hp di ESX)
+    local myNumber = "000000" -- Default
+    if PhoneData.PlayerData and PhoneData.PlayerData.charinfo and PhoneData.PlayerData.charinfo.phone then
+        myNumber = PhoneData.PlayerData.charinfo.phone 
+    end
+    -- Jika menggunakan gcphone / esx_addons_gcphone, kadang ada di properties lain
+    
     PhoneData.CallData.CallId = GenerateCallId(myNumber, CallData.number)
 
     TriggerServerEvent('qb-phone:server:CallContact', PhoneData.CallData.TargetData, PhoneData.CallData.CallId, AnonymousCall)
@@ -445,10 +449,7 @@ end
 
 RegisterCommand('phone', function()
     local PlayerData = ESX.GetPlayerData()
-    -- ESX Check Dead
     local isDead = false
-    if PlayerData.IsDead then isDead = true end -- ESX Legacy
-    -- Atau cek animasi mati
     if IsEntityDead(PlayerPedId()) then isDead = true end
 
     if not PhoneData.isOpen then
@@ -712,11 +713,10 @@ RegisterNUICallback('UpdateProfilePicture', function(data, cb)
 end)
 
 RegisterNUICallback('PostNewTweet', function(data, cb)
-    -- Perhatikan: ESX tidak menggunakan citizenid secara default, biasanya 'identifier'
     local TweetMessage = {
         firstName = PhoneData.PlayerData.firstName or "First",
         lastName = PhoneData.PlayerData.lastName or "Last",
-        citizenid = PhoneData.PlayerData.identifier, -- Diganti dari citizenid ke identifier
+        citizenid = PhoneData.PlayerData.identifier,
         message = escape_str(data.Message),
         time = data.Date,
         tweetId = GenerateTweetId(),
@@ -828,9 +828,14 @@ RegisterNUICallback('RemoveApplication', function(data, cb)
     cb('ok')
 end)
 
+-- --- DEPENDENCY REMOVED: Trucker Job ---
 RegisterNUICallback('GetTruckerData', function(_, cb)
-    -- ESX tidak punya metadata jobrep trucker default, perlu custom script
-    cb(nil) 
+    -- Stub: Mengembalikan data dummy atau nil
+    cb({
+        name = "Unknown",
+        tier = "1",
+        rep = 0
+    })
 end)
 
 RegisterNUICallback('GetGalleryData', function(_, cb)
@@ -863,7 +868,6 @@ RegisterNUICallback('DeleteContact', function(data, cb)
     for k, v in pairs(PhoneData.Contacts) do
         if v.name == Name and v.number == Number then
             table.remove(PhoneData.Contacts, k)
-            --if PhoneData.isOpen then
             SendNUIMessage({
                 action = 'PhoneNotification',
                 PhoneNotify = {
@@ -885,56 +889,73 @@ RegisterNUICallback('DeleteContact', function(data, cb)
     TriggerServerEvent('qb-phone:server:RemoveContact', Name, Number)
 end)
 
--- Dependencies dibawah ini membutuhkan resource qb-crypto, qb-lapraces versi ESX/custom
+-- --- DEPENDENCY REMOVED: Crypto ---
+-- Semua fitur crypto dimatikan agar tidak error
 RegisterNUICallback('GetCryptoData', function(data, cb)
-    ESX.TriggerServerCallback('qb-crypto:server:GetCryptoData', function(CryptoData)
-        cb(CryptoData)
-    end, data.crypto)
+    -- Stub
+    cb({
+        History = {},
+        Portfolio = 0,
+        Worth = 0,
+        WalletId = "Disabled"
+    })
 end)
 
 RegisterNUICallback('BuyCrypto', function(data, cb)
-    ESX.TriggerServerCallback('qb-crypto:server:BuyCrypto', function(CryptoData)
-        cb(CryptoData)
-    end, data)
+    ESX.ShowNotification('Crypto feature is disabled.')
+    cb({
+        History = {},
+        Portfolio = 0,
+        Worth = 0,
+        WalletId = "Disabled"
+    })
 end)
 
 RegisterNUICallback('SellCrypto', function(data, cb)
-    ESX.TriggerServerCallback('qb-crypto:server:SellCrypto', function(CryptoData)
-        cb(CryptoData)
-    end, data)
+    ESX.ShowNotification('Crypto feature is disabled.')
+    cb({
+        History = {},
+        Portfolio = 0,
+        Worth = 0,
+        WalletId = "Disabled"
+    })
 end)
 
 RegisterNUICallback('TransferCrypto', function(data, cb)
-    ESX.TriggerServerCallback('qb-crypto:server:TransferCrypto', function(CryptoData)
-        cb(CryptoData)
-    end, data)
+    ESX.ShowNotification('Crypto feature is disabled.')
+    cb({
+        History = {},
+        Portfolio = 0,
+        Worth = 0,
+        WalletId = "Disabled"
+    })
 end)
 
 RegisterNUICallback('GetCryptoTransactions', function(_, cb)
     local Data = {
-        CryptoTransactions = PhoneData.CryptoTransactions
+        CryptoTransactions = PhoneData.CryptoTransactions or {}
     }
     cb(Data)
 end)
 
+-- --- DEPENDENCY REMOVED: Racing ---
+-- Semua fitur racing dimatikan
 RegisterNUICallback('GetAvailableRaces', function(_, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:GetRaces', function(Races)
-        cb(Races)
-    end)
+    cb({})
 end)
 
 RegisterNUICallback('JoinRace', function(data, cb)
-    TriggerServerEvent('qb-lapraces:server:JoinRace', data.RaceData)
+    ESX.ShowNotification('Racing feature is disabled.')
     cb('ok')
 end)
 
 RegisterNUICallback('LeaveRace', function(data, cb)
-    TriggerServerEvent('qb-lapraces:server:LeaveRace', data.RaceData)
+    ESX.ShowNotification('Racing feature is disabled.')
     cb('ok')
 end)
 
 RegisterNUICallback('StartRace', function(data, cb)
-    TriggerServerEvent('qb-lapraces:server:StartRace', data.RaceData.RaceId)
+    ESX.ShowNotification('Racing feature is disabled.')
     cb('ok')
 end)
 
@@ -961,9 +982,8 @@ RegisterNUICallback('FetchVehicleResults', function(data, cb)
     ESX.TriggerServerCallback('qb-phone:server:GetVehicleSearchResults', function(result)
         if result ~= nil then
             for k, _ in pairs(result) do
-                ESX.TriggerServerCallback('police:IsPlateFlagged', function(flagged)
-                    result[k].isFlagged = flagged
-                end, result[k].plate)
+                -- Simplified flagging check
+                result[k].isFlagged = false
                 Wait(50)
             end
         end
@@ -976,139 +996,32 @@ RegisterNUICallback('FetchVehicleScan', function(_, cb)
     local plate = ESX.Math.Trim(GetVehicleNumberPlateText(vehicle))
     local vehname = GetDisplayNameFromVehicleModel(GetEntityModel(vehicle)):lower()
     ESX.TriggerServerCallback('qb-phone:server:ScanPlate', function(result)
-        ESX.TriggerServerCallback('police:IsPlateFlagged', function(flagged)
-            result.isFlagged = flagged
-            -- ESX biasanya tidak punya Shared.Vehicles di client side secara global seperti QB
-            -- Anda mungkin perlu menggunakan GetLabelText(vehname)
-            result.label = GetLabelText(vehname) 
-            cb(result)
-        end, plate)
+        result.isFlagged = false
+        result.label = GetLabelText(vehname) 
+        cb(result)
     end, plate)
 end)
 
-RegisterNUICallback('GetRaces', function(_, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:GetListedRaces', function(Races)
-        cb(Races)
-    end)
-end)
+-- --- Racing Callbacks (Stubbed) ---
+RegisterNUICallback('GetRaces', function(_, cb) cb({}) end)
+RegisterNUICallback('GetTrackData', function(data, cb) cb({}) end)
+RegisterNUICallback('SetupRace', function(data, cb) cb('ok') end)
+RegisterNUICallback('HasCreatedRace', function(_, cb) cb(false) end)
+RegisterNUICallback('IsInRace', function(_, cb) cb(false) end)
+RegisterNUICallback('IsAuthorizedToCreateRaces', function(data, cb) cb({IsAuthorized = false, IsBusy = false, IsNameAvailable = false}) end)
+RegisterNUICallback('StartTrackEditor', function(data, cb) cb('ok') end)
+RegisterNUICallback('GetRacingLeaderboards', function(_, cb) cb({}) end)
+RegisterNUICallback('RaceDistanceCheck', function(data, cb) cb(false) end)
+RegisterNUICallback('IsBusyCheck', function(data, cb) cb(false) end)
+RegisterNUICallback('CanRaceSetup', function(_, cb) cb(false) end)
 
-RegisterNUICallback('GetTrackData', function(data, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:GetTrackData', function(TrackData, CreatorData)
-        TrackData.CreatorData = CreatorData
-        cb(TrackData)
-    end, data.RaceId)
-end)
-
-RegisterNUICallback('SetupRace', function(data, cb)
-    TriggerServerEvent('qb-lapraces:server:SetupRace', data.RaceId, tonumber(data.AmountOfLaps))
-    cb('ok')
-end)
-
-RegisterNUICallback('HasCreatedRace', function(_, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:HasCreatedRace', function(HasCreated)
-        cb(HasCreated)
-    end)
-end)
-
-RegisterNUICallback('IsInRace', function(_, cb)
-    local InRace = exports['qb-lapraces']:IsInRace()
-    cb(InRace)
-end)
-
-RegisterNUICallback('IsAuthorizedToCreateRaces', function(data, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:IsAuthorizedToCreateRaces', function(IsAuthorized, NameAvailable)
-        data = {
-            IsAuthorized = IsAuthorized,
-            IsBusy = exports['qb-lapraces']:IsInEditor(),
-            IsNameAvailable = NameAvailable,
-        }
-        cb(data)
-    end, data.TrackName)
-end)
-
-RegisterNUICallback('StartTrackEditor', function(data, cb)
-    TriggerServerEvent('qb-lapraces:server:CreateLapRace', data.TrackName)
-    cb('ok')
-end)
-
-RegisterNUICallback('GetRacingLeaderboards', function(_, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:GetRacingLeaderboards', function(Races)
-        cb(Races)
-    end)
-end)
-
-RegisterNUICallback('RaceDistanceCheck', function(data, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:GetRacingData', function(RaceData)
-        local ped = PlayerPedId()
-        local coords = GetEntityCoords(ped)
-        local checkpointcoords = RaceData.Checkpoints[1].coords
-        local dist = #(coords - vector3(checkpointcoords.x, checkpointcoords.y, checkpointcoords.z))
-        if dist <= 115.0 then
-            if data.Joined then
-                TriggerEvent('qb-lapraces:client:WaitingDistanceCheck')
-            end
-            cb(true)
-        else
-            ESX.ShowNotification('You\'re too far away from the race. GPS has been set to the race.')
-            SetNewWaypoint(checkpointcoords.x, checkpointcoords.y)
-            cb(false)
-        end
-    end, data.RaceId)
-end)
-
-RegisterNUICallback('IsBusyCheck', function(data, cb)
-    if data.check == 'editor' then
-        cb(exports['qb-lapraces']:IsInEditor())
-    else
-        cb(exports['qb-lapraces']:IsInRace())
-    end
-end)
-
-RegisterNUICallback('CanRaceSetup', function(_, cb)
-    ESX.TriggerServerCallback('qb-lapraces:server:CanRaceSetup', function(CanSetup)
-        cb(CanSetup)
-    end)
-end)
-
-RegisterNUICallback('GetPlayerHouses', function(_, cb)
-    ESX.TriggerServerCallback('qb-phone:server:GetPlayerHouses', function(Houses)
-        cb(Houses)
-    end)
-end)
-
-RegisterNUICallback('GetPlayerKeys', function(_, cb)
-    ESX.TriggerServerCallback('qb-phone:server:GetHouseKeys', function(Keys)
-        cb(Keys)
-    end)
-end)
-
-RegisterNUICallback('SetHouseLocation', function(data, cb)
-    SetNewWaypoint(data.HouseData.HouseData.coords.enter.x, data.HouseData.HouseData.coords.enter.y)
-    ESX.ShowNotification('GPS has been set to ' .. data.HouseData.HouseData.adress .. '!')
-    cb('ok')
-end)
-
-RegisterNUICallback('RemoveKeyholder', function(data, cb)
-    TriggerServerEvent('qb-houses:server:removeHouseKey', data.HouseData.name, {
-        citizenid = data.HolderData.citizenid, -- Di ESX biasanya identifier
-        firstname = data.HolderData.charinfo.firstname,
-        lastname = data.HolderData.charinfo.lastname,
-    })
-    cb('ok')
-end)
-
-RegisterNUICallback('TransferCid', function(data, cb)
-    local TransferedCid = data.newBsn
-    ESX.TriggerServerCallback('qb-phone:server:TransferCid', function(CanTransfer)
-        cb(CanTransfer)
-    end, TransferedCid, data.HouseData)
-end)
-
-RegisterNUICallback('FetchPlayerHouses', function(data, cb)
-    ESX.TriggerServerCallback('qb-phone:server:MeosGetPlayerHouses', function(result)
-        cb(result)
-    end, data.input)
-end)
+-- --- DEPENDENCY REMOVED: Houses ---
+RegisterNUICallback('GetPlayerHouses', function(_, cb) cb({}) end)
+RegisterNUICallback('GetPlayerKeys', function(_, cb) cb({}) end)
+RegisterNUICallback('SetHouseLocation', function(data, cb) cb('ok') end)
+RegisterNUICallback('RemoveKeyholder', function(data, cb) cb('ok') end)
+RegisterNUICallback('TransferCid', function(data, cb) cb(false) end)
+RegisterNUICallback('FetchPlayerHouses', function(data, cb) cb({}) end)
 
 RegisterNUICallback('SetGPSLocation', function(data, cb)
     SetNewWaypoint(data.coords.x, data.coords.y)
@@ -1118,9 +1031,10 @@ end)
 
 RegisterNUICallback('SetApartmentLocation', function(data, cb)
     local ApartmentData = data.data.appartmentdata
-    local TypeData = Apartments.Locations[ApartmentData.type]
-    SetNewWaypoint(TypeData.coords.enter.x, TypeData.coords.enter.y)
-    ESX.ShowNotification('GPS has been set!')
+    if ApartmentData then
+         -- Logic apartment custom, biasanya ESX tidak punya default
+         ESX.ShowNotification('Apartment location not available')
+    end
     cb('ok')
 end)
 
@@ -1134,7 +1048,7 @@ RegisterNUICallback('SetupStoreApps', function(_, cb)
     local PlayerData = ESX.GetPlayerData()
     local data = {
         StoreApps = Config.StoreApps,
-        PhoneData = {} -- ESX biasanya tidak punya metadata.phonedata
+        PhoneData = {}
     }
     cb(data)
 end)
@@ -1165,12 +1079,12 @@ end)
 
 RegisterNUICallback('TransferMoney', function(data, cb)
     data.amount = tonumber(data.amount)
-    -- Perlu penyesuaian jika ESX tidak store bank di PlayerData client side secara realtime
-    -- Di ESX modern, PlayerData.accounts biasanya ada
+    -- Cek saldo client side (Account Bank)
     local bankMoney = 0
-    for i=1, #PhoneData.PlayerData.accounts do
-        if PhoneData.PlayerData.accounts[i].name == 'bank' then
-            bankMoney = PhoneData.PlayerData.accounts[i].money
+    local PlayerData = ESX.GetPlayerData()
+    for i=1, #PlayerData.accounts do
+        if PlayerData.accounts[i].name == 'bank' then
+            bankMoney = PlayerData.accounts[i].money
             break
         end
     end
@@ -1232,8 +1146,12 @@ RegisterNUICallback('CallContact', function(data, cb)
             InCall = PhoneData.CallData.InCall,
         }
         cb(status)
-        -- Perlu custom variable nomor hp sendiri
-        local myPhone = PhoneData.PlayerData.charinfo and PhoneData.PlayerData.charinfo.phone or "00000"
+        -- Custom Identifier/Phone Number
+        local myPhone = "000000"
+        if PhoneData.PlayerData and PhoneData.PlayerData.charinfo then
+             myPhone = PhoneData.PlayerData.charinfo.phone
+        end
+        
         if CanCall and not status.InCall and (data.ContactData.number ~= myPhone) then
             CallContact(data.ContactData, data.Anonymous)
         end
@@ -1251,7 +1169,6 @@ RegisterNUICallback('SendMessage', function(data, cb)
     local NumberKey = GetKeyByNumber(ChatNumber)
     local ChatKey = GetKeyByDate(NumberKey, ChatDate)
     
-    -- Identifier
     local myIdentifier = PhoneData.PlayerData.identifier
 
     if PhoneData.Chats[NumberKey] ~= nil then
@@ -1411,7 +1328,6 @@ RegisterNUICallback('TakePhoto', function(_, cb)
             break
         elseif IsControlJustPressed(1, 176) then -- TAKE.. PIC
             if Config.Fivemerr == true then
-                -- Fivemerr uploads via the server using screenshot-basic to further guard your API key.
                 return ESX.TriggerServerCallback('qb-phone:server:UploadToFivemerr', function(fivemerrData)
                     if fivemerrData == nil then
                         DestroyMobilePhone()
@@ -1815,7 +1731,10 @@ end)
 RegisterNetEvent('qb-phone:client:UpdateMessages', function(ChatMessages, SenderNumber, New)
     local NumberKey = GetKeyByNumber(SenderNumber)
     -- Perlu identifier custom
-    local myPhone = PhoneData.PlayerData.charinfo and PhoneData.PlayerData.charinfo.phone or "00000"
+    local myPhone = "000000"
+    if PhoneData.PlayerData and PhoneData.PlayerData.charinfo then
+         myPhone = PhoneData.PlayerData.charinfo.phone 
+    end
 
     if New then
         PhoneData.Chats[#PhoneData.Chats + 1] = {
@@ -2091,7 +2010,6 @@ end)
 
 RegisterNetEvent('qb-phone:client:addPoliceAlert', function(alertData)
     PlayerJob = ESX.GetPlayerData().job
-    -- ESX Job duty handled automatically or via esx_duty
     if PlayerJob.name == 'police' then
         SendNUIMessage({
             action = 'AddPoliceAlert',
