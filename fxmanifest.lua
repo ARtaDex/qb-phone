@@ -2,10 +2,16 @@ fx_version 'bodacious'
 game 'gta5'
 lua54 'yes'
 author 'Kakarot'
-description 'Allows players to access a phone to interact with various apps and features'
+description 'ESX Phone Converted from QBCore'
 version '1.3.0'
 
 ui_page 'html/index.html'
+
+-- Menambahkan dependencies agar script load setelah ESX dan DB siap
+dependencies {
+    'es_extended',
+    'oxmysql'
+}
 
 shared_scripts {
     'config.lua',
@@ -17,7 +23,6 @@ client_scripts {
 }
 
 server_scripts {
-    '@oxmysql/lib/MySQL.lua',
     'server/main.lua'
 }
 
