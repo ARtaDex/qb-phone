@@ -1,14 +1,16 @@
 Config = Config or {}
-Config.BillingCommissions = { -- This is a percentage (0.10) == 10%
+
+-- Komisi Billing (Sesuaikan dengan job di database ESX Anda)
+Config.BillingCommissions = { 
     mechanic = 0.10
 }
-Config.TweetDuration = 12 -- How many hours to load tweets (12 will load the past 12 hours of tweets)
+
+Config.TweetDuration = 12 
 Config.RepeatTimeout = 2000
 Config.CallRepeats = 10
 Config.OpenPhone = 'M'
 
--- Set this to true if you wish to use Fivemerr (https://fivemerr.com/) for media uploads. 
--- Ensure to add your API key to server/main.lua 
+-- Fivemerr (Biarkan false jika tidak dipakai)
 Config.Fivemerr = false
 
 Config.PhoneApplications = {
@@ -98,6 +100,10 @@ Config.PhoneApplications = {
         slot = 8,
         Alerts = 0,
     },
+    -- APLIKASI DIBAWAH INI DI-KOMENTARI (HIDDEN) KARENA DEPENDENSI DIHAPUS
+    -- Hapus tanda komen (--[[ ... ]]) jika Anda sudah memasang script pengganti untuk fitur tersebut.
+    
+    --[[ 
     ['crypto'] = {
         app = 'crypto',
         color = '#004682',
@@ -127,7 +133,9 @@ Config.PhoneApplications = {
         blockedjobs = {},
         slot = 11,
         Alerts = 0,
-    },
+    }, 
+    ]]
+    
     ['lawyers'] = {
         app = 'lawyers',
         color = '#26d4ce',
@@ -166,12 +174,13 @@ Config.PhoneApplications = {
         color = '#004682',
         icon = 'fas fa-ad',
         tooltipText = 'MDT',
-        job = 'police',
+        job = 'police', -- Pastikan nama job di database ESX adalah 'police'
         blockedjobs = {},
         slot = 15,
         Alerts = 0,
     },
 }
+
 Config.MaxSlots = 20
 
 Config.StoreApps = {
@@ -187,7 +196,7 @@ Config.StoreApps = {
         slot = 16,
         Alerts = 0,
         password = true,
-        creator = 'QBCore',
+        creator = 'System', -- Ubah dari QBCore ke System/Server Name
         title = 'Territory',
     },
 }
