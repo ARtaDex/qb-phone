@@ -935,3 +935,47 @@ RegisterCommand('bill', function(source, args)
         TriggerClientEvent('esx:showNotification', source, 'No Access')
     end
 end)
+
+-- =====================================================
+-- PHONE NUMBER GENERATOR (SOLUSI AUTO GENERATE)
+-- Tambahkan ini di bagian paling bawah server/main.lua
+-- =====================================================
+
+local function GenerateUniquePhoneNumber()
+    local running = true
+    local phone = nil
+    while running do
+        -- Format nomor HP (Contoh: 0812345678)
+        local rand = math.random(10000000, 99999999)
+        phone = "08" .. rand
+        
+        -- Cek apakah nomor sudah dipakai orang lain
+        local count = MySQL.scalar.await('SELECT COUNT(*) FROM users WHERE phone_number = ?', { phone })
+        if count == 0 then
+            running = false
+        end
+    end
+    return phone
+end
+
+RegisterNetEvent('esx:playerLoaded')
+AddEventHandler('esx:playerLoaded', function(player, xPlayer, isNew)
+    -- Ambil nomor hp saat ini
+    local currentNum = xPlayer.get('phoneNumber')
+
+    -- Jika nomor tidak ada (nil) atau kosong ('')
+    if currentNum == nil or currentNum == '' then
+        print('[INFO] Player ' .. xPlayer.getName() .. ' tidak punya nomor HP. Membuat nomor baru...')
+        
+        local newNum = GenerateUniquePhoneNumber()
+        
+        -- 1. Simpan ke Database
+        MySQL.update('UPDATE users SET phone_number = ? WHERE identifier = ?', { newNum, xPlayer.identifier }, function(affectedRows)
+            if affectedRows > 0 then
+                -- 2. Update data pemain yang sedang online agar tidak perlu relog
+                xPlayer.set('phoneNumber', newNum)
+                print('[SUCCESS] Nomor HP baru dibuat untuk ' .. xPlayer.getName() .. ': ' .. newNum)
+            end
+        end)
+    end
+end)
