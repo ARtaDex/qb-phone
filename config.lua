@@ -8,7 +8,7 @@ Config.BillingCommissions = {
 Config.TweetDuration = 12 
 Config.RepeatTimeout = 2000
 Config.CallRepeats = 10
-Config.OpenPhone = 'M'
+Config.OpenPhone = ''
 
 -- Fivemerr (Biarkan false jika tidak dipakai)
 Config.Fivemerr = false

@@ -47,8 +47,32 @@ $(document).on('click', '.bank-app-header-button', function(e){
 })
 
 QB.Phone.Functions.DoBankOpen = function() {
-    QB.Phone.Data.PlayerData.money.bank = (QB.Phone.Data.PlayerData.money.bank).toFixed();
-    $(".bank-app-account-number").val(QB.Phone.Data.PlayerData.charinfo.account);
+    // --- BAGIAN PERBAIKAN START ---
+    // 1. Cek apakah PlayerData.money ada? Jika tidak, buat object kosong
+    if (!QB.Phone.Data.PlayerData.money) {
+        QB.Phone.Data.PlayerData.money = {};
+    }
+
+    // 2. Cek apakah bank ada? Jika tidak, set ke 0
+    if (typeof QB.Phone.Data.PlayerData.money.bank === 'undefined' || QB.Phone.Data.PlayerData.money.bank === null) {
+        QB.Phone.Data.PlayerData.money.bank = 0;
+    }
+
+    // 3. Pastikan formatnya angka sebelum di-toFixed
+    var currentBalance = parseFloat(QB.Phone.Data.PlayerData.money.bank);
+    QB.Phone.Data.PlayerData.money.bank = currentBalance.toFixed(0);
+    
+    // 4. Handle charinfo account (nomor rekening)
+    var accountNum = "Unknown";
+    if (QB.Phone.Data.PlayerData.charinfo && QB.Phone.Data.PlayerData.charinfo.account) {
+        accountNum = QB.Phone.Data.PlayerData.charinfo.account;
+    } else if (QB.Phone.Data.PlayerData.charinfo && QB.Phone.Data.PlayerData.charinfo.phone) {
+        // Fallback ke nomor hp jika tidak ada nomor rekening (ESX style)
+        accountNum = QB.Phone.Data.PlayerData.charinfo.phone; 
+    }
+    // --- BAGIAN PERBAIKAN END ---
+
+    $(".bank-app-account-number").val(accountNum);
     $(".bank-app-account-balance").html("&#36; "+QB.Phone.Data.PlayerData.money.bank);
     $(".bank-app-account-balance").data('balance', QB.Phone.Data.PlayerData.money.bank);
 

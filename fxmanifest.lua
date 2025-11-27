@@ -7,7 +7,7 @@ version '1.3.0'
 
 ui_page 'html/index.html'
 
--- Menambahkan dependencies agar script load setelah ESX dan DB siap
+-- Dependencies memastikan resource ini start SETELAH es_extended dan oxmysql
 dependencies {
     'es_extended',
     'oxmysql'

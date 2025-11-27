@@ -161,24 +161,49 @@ local function LoadPhone()
         PhoneData.PlayerData = ESX.GetPlayerData()
         PlayerJob = PhoneData.PlayerData.job
         
+        -- ============================================================
+        -- FIX ERROR BANK.JS (Money Formatting)
+        -- Kita buat format .money agar sesuai dengan harapan Javascript
+        -- ============================================================
+        PhoneData.PlayerData.money = {
+            bank = 0,
+            cash = 0
+        }
+
+        if PhoneData.PlayerData.accounts then
+            for _, account in pairs(PhoneData.PlayerData.accounts) do
+                if account.name == 'bank' then
+                    PhoneData.PlayerData.money.bank = account.money
+                elseif account.name == 'money' then
+                    PhoneData.PlayerData.money.cash = account.money
+                end
+            end
+        end
+        
+        -- Fallback jika job nil (mencegah error JS lain)
+        if PhoneData.PlayerData.job == nil then
+            PhoneData.PlayerData.job = { name = "unemployed", label = "Unemployed", onduty = true }
+        else
+            PhoneData.PlayerData.job.onduty = true 
+        end
+        -- ============================================================
+
         local PhoneMeta = pData.PhoneMeta or {} 
         PhoneData.MetaData = PhoneMeta
 
-        if pData.InstalledApps ~= nil and next(pData.InstalledApps) ~= nil then
-            for _, v in pairs(pData.InstalledApps) do
-                local AppData = Config.StoreApps[v.app]
-                Config.PhoneApplications[v.app] = {
-                    app = v.app,
-                    color = AppData.color,
-                    icon = AppData.icon,
-                    tooltipText = AppData.title,
-                    tooltipPos = 'right',
-                    job = AppData.job,
-                    blockedjobs = AppData.blockedjobs,
-                    slot = AppData.slot,
-                    Alerts = 0,
-                }
-            end
+        -- Load Apps dari Config
+        for appName, AppData in pairs(Config.StoreApps) do
+            Config.PhoneApplications[appName] = {
+                app = appName,
+                color = AppData.color,
+                icon = AppData.icon,
+                tooltipText = AppData.title,
+                tooltipPos = 'right',
+                job = AppData.job,
+                blockedjobs = AppData.blockedjobs,
+                slot = AppData.slot,
+                Alerts = 0,
+            }
         end
 
         if PhoneMeta.profilepicture == nil then
@@ -189,7 +214,9 @@ local function LoadPhone()
 
         if pData.Applications ~= nil and next(pData.Applications) ~= nil then
             for k, v in pairs(pData.Applications) do
-                Config.PhoneApplications[k].Alerts = v
+                if Config.PhoneApplications[k] then
+                    Config.PhoneApplications[k].Alerts = v
+                end
             end
         end
 
@@ -210,7 +237,6 @@ local function LoadPhone()
                     messages = json.decode(v.messages)
                 }
             end
-
             PhoneData.Chats = Chats
         end
 
@@ -240,7 +266,7 @@ local function LoadPhone()
         SendNUIMessage({
             action = 'LoadPhoneData',
             PhoneData = PhoneData,
-            PlayerData = PhoneData.PlayerData,
+            PlayerData = PhoneData.PlayerData, -- Data ini sekarang sudah punya .money
             PlayerJob = PhoneData.PlayerData.job,
             applications = Config.PhoneApplications,
             PlayerId = GetPlayerServerId(PlayerId())

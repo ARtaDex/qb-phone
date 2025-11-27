@@ -39,7 +39,14 @@ SetupGarageVehicles = function(Vehicles) {
     $(".garage-vehicles").html("");
     if (Vehicles != null) {
         $.each(Vehicles, function(i, vehicle){
-            var Element = '<div class="garage-vehicle" id="vehicle-'+i+'"><span class="garage-vehicle-firstletter">'+vehicle.brand.charAt(0)+'</span> <span class="garage-vehicle-name">'+vehicle.fullname+'</span> </div>';
+            // --- FIX START ---
+            var brandName = vehicle.brand ? vehicle.brand : "Car";
+            var modelName = vehicle.model ? vehicle.model : "Vehicle";
+            var fullName = vehicle.fullname ? vehicle.fullname : (brandName + " " + modelName);
+            var firstLetter = brandName.charAt(0);
+            // --- FIX END ---
+
+            var Element = '<div class="garage-vehicle" id="vehicle-'+i+'"><span class="garage-vehicle-firstletter">'+firstLetter+'</span> <span class="garage-vehicle-name">'+fullName+'</span> </div>';
 
             $(".garage-vehicles").append(Element);
             $("#vehicle-"+i).data('VehicleData', vehicle);

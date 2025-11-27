@@ -72,7 +72,15 @@ QB.Phone.Functions.SetupMails = function(Mails) {
     }
     var MessageTime = Hourssssss + ":" + Minutessss;
 
-    $("#mail-header-mail").html(QB.Phone.Data.PlayerData.charinfo.firstname+"."+QB.Phone.Data.PlayerData.charinfo.lastname+"@qbcore.com");
+    var firstName = "User";
+    var lastName = "Name";
+
+    if (QB.Phone.Data.PlayerData && QB.Phone.Data.PlayerData.charinfo) {
+        firstName = QB.Phone.Data.PlayerData.charinfo.firstname || "User";
+        lastName = QB.Phone.Data.PlayerData.charinfo.lastname || "Name";
+    }
+
+    $("#mail-header-mail").html(firstName+"."+lastName+"@los-santos.com"); // Ganti domain sesuai keinginan
     $("#mail-header-lastsync").html("Last synchronized "+MessageTime);
     if (Mails !== null && Mails !== undefined) {
         if (Mails.length > 0) {

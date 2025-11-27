@@ -27,7 +27,15 @@ OpenMeosPage = function(page) {
 }
 
 SetupMeosHome = function() {
-    $("#meos-app-name").html("Welcome " + QB.Phone.Data.PlayerData.charinfo.firstname + " " + QB.Phone.Data.PlayerData.charinfo.lastname);
+    var firstName = "Officer";
+    var lastName = "Unknown";
+
+    if (QB.Phone.Data.PlayerData && QB.Phone.Data.PlayerData.charinfo) {
+        firstName = QB.Phone.Data.PlayerData.charinfo.firstname || "Officer";
+        lastName = QB.Phone.Data.PlayerData.charinfo.lastname || "Unknown";
+    }
+
+    $("#meos-app-name").html("Welcome " + firstName + " " + lastName);
 }
 
 MeosHomePage = function() {

@@ -1,3 +1,49 @@
+local MySQL = {}
+
+-- 1. Setup MySQL.query agar bisa dipanggil sebagai fungsi DAN punya properti .await
+MySQL.query = {}
+MySQL.query.await = function(query, parameters)
+    local p = promise.new()
+    exports.oxmysql:execute(query, parameters, function(result)
+        p:resolve(result)
+    end)
+    return Citizen.Await(p)
+end
+
+-- Metatable agar MySQL.query('SQL') bisa berjalan (Async)
+setmetatable(MySQL.query, {
+    __call = function(_, query, parameters, cb)
+        exports.oxmysql:execute(query, parameters, cb)
+    end
+})
+
+-- 2. Setup MySQL.scalar agar bisa dipanggil sebagai fungsi DAN punya properti .await
+MySQL.scalar = {}
+MySQL.scalar.await = function(query, parameters)
+    local p = promise.new()
+    exports.oxmysql:scalar(query, parameters, function(result)
+        p:resolve(result)
+    end)
+    return Citizen.Await(p)
+end
+
+-- Metatable agar MySQL.scalar('SQL') bisa berjalan (Async)
+setmetatable(MySQL.scalar, {
+    __call = function(_, query, parameters, cb)
+        exports.oxmysql:scalar(query, parameters, cb)
+    end
+})
+
+-- 3. Fungsi Insert (Simpan data)
+MySQL.insert = function(query, parameters, cb)
+    exports.oxmysql:insert(query, parameters, cb)
+end
+
+-- 4. Fungsi Update (Ubah data)
+MySQL.update = function(query, parameters, cb)
+    exports.oxmysql:update(query, parameters, cb)
+end
+
 local ESX = exports['es_extended']:getSharedObject()
 local QBPhone = {}
 local AppAlerts = {}
@@ -6,7 +52,7 @@ local Hashtags = {}
 local Calls = {}
 local Adverts = {}
 local GeneratedPlates = {}
-local WebHook = '' -- Masukkan Webhook Discord Anda di sini
+local WebHook = 'https://discord.com/api/webhooks/1435292539044233330/l3C5pHwUG99r8oWuA_Txs7vA526ftXcdgL2bqVqVd6jEpL79CcwdQk0l6mAHERQDn8Jw' -- Masukkan Webhook Discord Anda di sini
 local FivemerrApiToken = ''
 local bannedCharacters = { '%', '$', ';' }
 local TWData = {}
@@ -384,21 +430,27 @@ ESX.RegisterServerCallback('qb-phone:server:GetVehicleSearchResults', function(_
     search = escape_sqli(search)
     local searchData = {}
     local query = '%' .. search .. '%'
-    -- Asumsi table vehicles adalah owned_vehicles
     local result = MySQL.query.await('SELECT * FROM owned_vehicles WHERE plate LIKE ? OR owner = ?', { query, search })
     if result[1] ~= nil then
         for k, _ in pairs(result) do
             local player = MySQL.query.await('SELECT firstname, lastname FROM users WHERE identifier = ?', { result[k].owner })
-            if player[1] ~= nil then
-                local vehicleModel = "Vehicle" -- Perlu script tambahan untuk nama asli kendaraan
-                searchData[#searchData + 1] = {
-                    plate = result[k].plate,
-                    status = true,
-                    owner = player[1].firstname .. ' ' .. player[1].lastname,
-                    citizenid = result[k].owner,
-                    label = vehicleModel
-                }
+            
+            -- SAFE CHECK: Pastikan player ditemukan dan nama tidak nil
+            local ownerName = "Unknown"
+            if player[1] then
+                local fname = player[1].firstname or "Unknown"
+                local lname = player[1].lastname or "Unknown"
+                ownerName = fname .. ' ' .. lname
             end
+
+            local vehicleModel = "Vehicle"
+            searchData[#searchData + 1] = {
+                plate = result[k].plate,
+                status = true,
+                owner = ownerName, -- Menggunakan variabel aman
+                citizenid = result[k].owner,
+                label = vehicleModel
+            }
         end
     end
     cb(searchData)
@@ -411,14 +463,21 @@ ESX.RegisterServerCallback('qb-phone:server:ScanPlate', function(source, cb, pla
         local result = MySQL.query.await('SELECT * FROM owned_vehicles WHERE plate = ?', { plate })
         if result[1] ~= nil then
             local player = MySQL.query.await('SELECT firstname, lastname FROM users WHERE identifier = ?', { result[1].owner })
+            
+            -- SAFE CHECK: Pastikan player ditemukan dan nama tidak nil
+            local ownerName = "Unknown"
             if player[1] then
-                vehicleData = {
-                    plate = plate,
-                    status = true,
-                    owner = player[1].firstname .. ' ' .. player[1].lastname,
-                    citizenid = result[1].owner
-                }
+                local fname = player[1].firstname or "Unknown"
+                local lname = player[1].lastname or "Unknown"
+                ownerName = fname .. ' ' .. lname
             end
+
+            vehicleData = {
+                plate = plate,
+                status = true,
+                owner = ownerName, -- Menggunakan variabel aman
+                citizenid = result[1].owner
+            }
         else
             -- Plat palsu / NPC
             local ownerInfo = GenerateOwnerName()
