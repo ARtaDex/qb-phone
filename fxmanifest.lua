@@ -2,7 +2,7 @@ fx_version 'bodacious'
 game 'gta5'
 lua54 'yes'
 author 'Kakarot'
-description 'ESX Phone Converted from QBCore'
+description 'ESX Phone Converted from QBCore Convert To ESX by A R d x'
 version '1.3.0'
 
 ui_page 'html/index.html'
@@ -33,4 +33,6 @@ files {
     'html/css/*.css',
     'html/img/backgrounds/*.png',
     'html/img/apps/*.png',
+    'html/img/frames/*.png',
+
 }

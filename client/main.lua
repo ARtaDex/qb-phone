@@ -135,6 +135,41 @@ local function findVehFromPlateAndLocate(plate)
 end
 
 local function DisableDisplayControlActions()
+    -- 1. MATIKAN SERANGAN (Agar tidak memukul saat klik aplikasi)
+    DisableControlAction(0, 24, true) -- Attack (Klik Kiri)
+    DisableControlAction(0, 257, true) -- Attack 2
+    DisableControlAction(0, 140, true) -- Melee Attack Light
+    DisableControlAction(0, 141, true) -- Melee Attack Heavy
+    DisableControlAction(0, 142, true) -- Melee Attack Alternate
+    DisableControlAction(0, 263, true) -- Melee Attack 1
+    DisableControlAction(0, 264, true) -- Melee Attack 2
+
+    -- 2. MATIKAN WEAPON WHEEL & SCROLL (Agar senjata tidak ganti)
+    DisableControlAction(0, 37, true) -- Select Weapon (Tab)
+    DisableControlAction(0, 12, true) -- Weapon Wheel Up (Scroll)
+    DisableControlAction(0, 13, true) -- Weapon Wheel Down (Scroll)
+    DisableControlAction(0, 14, true) -- Weapon Wheel Next (Scroll)
+    DisableControlAction(0, 15, true) -- Weapon Wheel Prev (Scroll)
+    DisableControlAction(0, 261, true) -- Prev Weapon
+    DisableControlAction(0, 262, true) -- Next Weapon
+
+    -- 3. MATIKAN AIM & RELOAD
+    DisableControlAction(0, 25, true) -- Aim (Klik Kanan)
+    DisableControlAction(0, 45, true) -- Reload (R)
+
+    -- 4. MATIKAN GERAKAN FISIK LAINNYA
+    DisableControlAction(0, 22, true) -- Jump (Spasi) - Opsional, matikan jika ingin
+    DisableControlAction(0, 44, true) -- Cover (Q)
+    DisableControlAction(0, 143, true) -- Melee Block (R)
+    
+    -- 5. MATIKAN KAMERA (Agar mouse tidak memutar kamera saat gerak kursor HP)
+    DisableControlAction(0, 1, true) -- Look Left/Right
+    DisableControlAction(0, 2, true) -- Look Up/Down
+
+    -- 6. MATIKAN TOMBOL HP & PAUSE
+    DisableControlAction(0, 199, true) -- Pause Menu (P)
+    DisableControlAction(0, 200, true) -- Pause Menu (ESC)
+    DisableControlAction(0, 245, true) -- disable chat
     DisableControlAction(0, 1, true)   -- disable mouse look
     DisableControlAction(0, 2, true)   -- disable mouse look
     DisableControlAction(0, 3, true)   -- disable mouse look
@@ -152,8 +187,31 @@ local function DisableDisplayControlActions()
     DisableControlAction(0, 200, true) -- disable escape
     DisableControlAction(0, 202, true) -- disable escape
     DisableControlAction(0, 322, true) -- disable escape
-    DisableControlAction(0, 245, true) -- disable chat
+    
+    -- CATATAN: Kita TIDAK mematikan Group 30 (Move LR) dan 31 (Move UD)
+    -- agar WASD tetap berfungsi.
 end
+
+-- local function DisableDisplayControlActions()
+--     DisableControlAction(0, 1, true)   -- disable mouse look
+--     DisableControlAction(0, 2, true)   -- disable mouse look
+--     DisableControlAction(0, 3, true)   -- disable mouse look
+--     DisableControlAction(0, 4, true)   -- disable mouse look
+--     DisableControlAction(0, 5, true)   -- disable mouse look
+--     DisableControlAction(0, 6, true)   -- disable mouse look
+--     DisableControlAction(0, 263, true) -- disable melee
+--     DisableControlAction(0, 264, true) -- disable melee
+--     DisableControlAction(0, 257, true) -- disable melee
+--     DisableControlAction(0, 140, true) -- disable melee
+--     DisableControlAction(0, 141, true) -- disable melee
+--     DisableControlAction(0, 142, true) -- disable melee
+--     DisableControlAction(0, 143, true) -- disable melee
+--     DisableControlAction(0, 177, true) -- disable escape
+--     DisableControlAction(0, 200, true) -- disable escape
+--     DisableControlAction(0, 202, true) -- disable escape
+--     DisableControlAction(0, 322, true) -- disable escape
+--     DisableControlAction(0, 245, true) -- disable chat
+-- end
 
 local function LoadPhone()
     Wait(100)
@@ -162,8 +220,7 @@ local function LoadPhone()
         PlayerJob = PhoneData.PlayerData.job
         
         -- ============================================================
-        -- FIX ERROR BANK.JS (Money Formatting)
-        -- Kita buat format .money agar sesuai dengan harapan Javascript
+        -- 1. FIX FORMAT UANG (Agar Bank.js tidak error)
         -- ============================================================
         PhoneData.PlayerData.money = {
             bank = 0,
@@ -180,18 +237,35 @@ local function LoadPhone()
             end
         end
         
-        -- Fallback jika job nil (mencegah error JS lain)
         if PhoneData.PlayerData.job == nil then
             PhoneData.PlayerData.job = { name = "unemployed", label = "Unemployed", onduty = true }
         else
             PhoneData.PlayerData.job.onduty = true 
         end
-        -- ============================================================
 
-        local PhoneMeta = pData.PhoneMeta or {} 
+        -- ============================================================
+        -- 2. FIX LOAD SETTINGS (BACKGROUND & FOTO PROFIL)
+        -- ============================================================
+        -- PERBAIKAN: Server mengirim 'MetaData', bukan 'PhoneMeta'
+        local PhoneMeta = pData.MetaData or {} 
         PhoneData.MetaData = PhoneMeta
 
-        -- Load Apps dari Config
+        -- Cek Profile Picture
+        if PhoneData.MetaData.profilepicture == nil then
+            PhoneData.MetaData.profilepicture = 'default'
+        end
+
+        -- Cek Background
+        if PhoneData.MetaData.background == nil then
+            PhoneData.MetaData.background = "default-qbcore"
+        end
+
+        if PhoneData.MetaData.frame == nil then
+            PhoneData.MetaData.frame = "samsung-s10" -- Ganti sesuai nama file frame default kamu
+        end
+        -- ============================================================
+
+        -- Load Aplikasi
         for appName, AppData in pairs(Config.StoreApps) do
             Config.PhoneApplications[appName] = {
                 app = appName,
@@ -206,12 +280,6 @@ local function LoadPhone()
             }
         end
 
-        if PhoneMeta.profilepicture == nil then
-            PhoneData.MetaData.profilepicture = 'default'
-        else
-            PhoneData.MetaData.profilepicture = PhoneMeta.profilepicture
-        end
-
         if pData.Applications ~= nil and next(pData.Applications) ~= nil then
             for k, v in pairs(pData.Applications) do
                 if Config.PhoneApplications[k] then
@@ -220,13 +288,15 @@ local function LoadPhone()
             end
         end
 
-        if pData.MentionedTweets ~= nil and next(pData.MentionedTweets) ~= nil then
-            PhoneData.MentionedTweets = pData.MentionedTweets
-        end
-
-        if pData.PlayerContacts ~= nil and next(pData.PlayerContacts) ~= nil then
-            PhoneData.Contacts = pData.PlayerContacts
-        end
+        -- Load Data Lainnya
+        if pData.MentionedTweets ~= nil then PhoneData.MentionedTweets = pData.MentionedTweets end
+        if pData.PlayerContacts ~= nil then PhoneData.Contacts = pData.PlayerContacts end
+        if pData.Hashtags ~= nil then PhoneData.Hashtags = pData.Hashtags end
+        if pData.Tweets ~= nil then PhoneData.Tweets = pData.Tweets end
+        if pData.Mails ~= nil then PhoneData.Mails = pData.Mails end
+        if pData.Adverts ~= nil then PhoneData.Adverts = pData.Adverts end
+        if pData.CryptoTransactions ~= nil then PhoneData.CryptoTransactions = pData.CryptoTransactions end
+        if pData.Images ~= nil then PhoneData.Images = pData.Images end
 
         if pData.Chats ~= nil and next(pData.Chats) ~= nil then
             local Chats = {}
@@ -240,33 +310,10 @@ local function LoadPhone()
             PhoneData.Chats = Chats
         end
 
-        if pData.Hashtags ~= nil and next(pData.Hashtags) ~= nil then
-            PhoneData.Hashtags = pData.Hashtags
-        end
-
-        if pData.Tweets ~= nil and next(pData.Tweets) ~= nil then
-            PhoneData.Tweets = pData.Tweets
-        end
-
-        if pData.Mails ~= nil and next(pData.Mails) ~= nil then
-            PhoneData.Mails = pData.Mails
-        end
-
-        if pData.Adverts ~= nil and next(pData.Adverts) ~= nil then
-            PhoneData.Adverts = pData.Adverts
-        end
-
-        if pData.CryptoTransactions ~= nil and next(pData.CryptoTransactions) ~= nil then
-            PhoneData.CryptoTransactions = pData.CryptoTransactions
-        end
-        if pData.Images ~= nil and next(pData.Images) ~= nil then
-            PhoneData.Images = pData.Images
-        end
-
         SendNUIMessage({
             action = 'LoadPhoneData',
             PhoneData = PhoneData,
-            PlayerData = PhoneData.PlayerData, -- Data ini sekarang sudah punya .money
+            PlayerData = PhoneData.PlayerData,
             PlayerJob = PhoneData.PlayerData.job,
             applications = Config.PhoneApplications,
             PlayerId = GetPlayerServerId(PlayerId())
@@ -277,39 +324,72 @@ end
 local function OpenPhone()
     ESX.TriggerServerCallback('qb-phone:server:HasPhone', function(HasPhone)
         if HasPhone then
-            PhoneData.PlayerData = ESX.GetPlayerData()
-            SetNuiFocus(true, true)
-            SendNUIMessage({
-                action = 'open',
-                Tweets = PhoneData.Tweets,
-                AppData = Config.PhoneApplications,
-                CallData = PhoneData.CallData,
-                PlayerData = PhoneData.PlayerData,
-            })
-            PhoneData.isOpen = true
-
-            CreateThread(function()
-                while PhoneData.isOpen do
-                    DisableDisplayControlActions()
-                    Wait(1)
+            -- 1. PANGGIL CALLBACK KHUSUS UNTUK MINTA NOMOR HP TERBARU
+            ESX.TriggerServerCallback('qb-phone:server:GetMyNumber', function(myRealNumber)
+                
+                local RawPlayerData = ESX.GetPlayerData()
+                
+                -- Format Uang
+                RawPlayerData.money = { bank = 0, cash = 0 }
+                if RawPlayerData.accounts then
+                    for _, account in pairs(RawPlayerData.accounts) do
+                        if account.name == 'bank' then RawPlayerData.money.bank = account.money
+                        elseif account.name == 'money' then RawPlayerData.money.cash = account.money end
+                    end
                 end
-            end)
 
-            if not PhoneData.CallData.InCall then
-                DoPhoneAnimation('cellphone_text_in')
-            else
-                DoPhoneAnimation('cellphone_call_to_text')
-            end
+                -- Konstruksi Charinfo dengan Nomor HP dari Server
+                RawPlayerData.charinfo = {}
+                RawPlayerData.charinfo.firstname = RawPlayerData.firstName or "Citizen"
+                RawPlayerData.charinfo.lastname = RawPlayerData.lastName or "Unknown"
+                
+                -- GANTI '00000' DENGAN NOMOR ASLI DARI SERVER
+                RawPlayerData.charinfo.phone = myRealNumber or "00000"
+                RawPlayerData.charinfo.account = myRealNumber or "00000" -- Bank account ikut nomor hp
 
-            SetTimeout(250, function()
-                newPhoneProp()
-            end)
+                PhoneData.PlayerData = RawPlayerData
 
-            -- Gunakan ESX get owned vehicles
-            ESX.TriggerServerCallback('qb-phone:server:GetVehicleSearchResults', function(vehicles)
-                -- Kita gunakan fungsi search result yang sudah ada di server untuk list mobil juga
-                PhoneData.GarageVehicles = vehicles
-            end, "") 
+                SetNuiFocus(true, true)
+                SetNuiFocusKeepInput(true)
+                SendNUIMessage({
+                    action = 'open',
+                    Tweets = PhoneData.Tweets,
+                    AppData = Config.PhoneApplications,
+                    CallData = PhoneData.CallData,
+                    PlayerData = PhoneData.PlayerData,
+                })
+                PhoneData.isOpen = true
+
+                CreateThread(function()
+                    while PhoneData.isOpen do
+                        DisableDisplayControlActions()
+                        Wait(1)
+                    end
+                end)
+
+                if not PhoneData.CallData.InCall then
+                    DoPhoneAnimation('cellphone_text_in')
+                else
+                    DoPhoneAnimation('cellphone_call_to_text')
+                end
+
+                SetTimeout(250, function()
+                    newPhoneProp()
+                end)
+
+                ESX.TriggerServerCallback('qb-phone:server:GetMyVehicles', function(vehicles)
+                    for k, v in pairs(vehicles) do
+                        local modelHash = v.model
+                        if type(modelHash) == 'string' then modelHash = GetHashKey(modelHash) end
+                        local displayName = GetDisplayNameFromVehicleModel(modelHash)
+                        local labelName = GetLabelText(displayName)
+                        if labelName == "NULL" then labelName = displayName end
+                        v.fullname = labelName
+                        v.model = labelName
+                    end
+                    PhoneData.GarageVehicles = vehicles
+                end)
+            end) -- End Callback GetMyNumber
         else
             ESX.ShowNotification("You don't have a phone")
         end
@@ -487,7 +567,7 @@ RegisterCommand('phone', function()
     end
 end)
 
-RegisterKeyMapping('phone', 'Open Phone', 'keyboard', Config.OpenPhone)
+--RegisterKeyMapping('phone', 'Open Phone', 'keyboard', Config.OpenPhone)
 
 -- NUI Callbacks
 
@@ -564,6 +644,7 @@ RegisterNUICallback('Close', function(_, cb)
         DoPhoneAnimation('cellphone_text_to_call')
     end
     SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
     SetTimeout(500, function()
         PhoneData.isOpen = false
     end)
@@ -649,11 +730,18 @@ RegisterNUICallback('DeleteAdvert', function(_, cb)
 end)
 
 RegisterNUICallback('LoadAdverts', function(_, cb)
-    SendNUIMessage({
-        action = 'RefreshAdverts',
-        Adverts = PhoneData.Adverts
-    })
-    cb('ok')
+    -- Minta data terbaru dari Server
+    ESX.TriggerServerCallback('qb-phone:server:GetAdverts', function(Adverts)
+        -- Update data lokal
+        PhoneData.Adverts = Adverts
+        
+        -- Kirim ke UI (Layar HP)
+        SendNUIMessage({
+            action = 'RefreshAdverts',
+            Adverts = PhoneData.Adverts
+        })
+    end)
+    cb({})
 end)
 
 RegisterNUICallback('ClearAlerts', function(data, cb)
@@ -1195,7 +1283,8 @@ RegisterNUICallback('SendMessage', function(data, cb)
     local NumberKey = GetKeyByNumber(ChatNumber)
     local ChatKey = GetKeyByDate(NumberKey, ChatDate)
     
-    local myIdentifier = PhoneData.PlayerData.identifier
+    -- PASTIKAN IDENTIFIER ADA (Fallback ke 'Unknown' jika nil)
+    local myIdentifier = PhoneData.PlayerData.identifier or "Unknown"
 
     if PhoneData.Chats[NumberKey] ~= nil then
         if (PhoneData.Chats[NumberKey].messages == nil) then
@@ -1250,7 +1339,7 @@ RegisterNUICallback('SendMessage', function(data, cb)
                     data = {},
                 }
             elseif ChatType == 'location' then
-                PhoneData.Chats[NumberKey].messages[ChatDate].messages[#PhoneData.Chats[NumberKey].messages[ChatDate].messages + 1] = {
+                PhoneData.Chats[NumberKey].messages[ChatKey].messages[#PhoneData.Chats[NumberKey].messages[ChatKey].messages + 1] = {
                     message = 'Shared Location',
                     time = ChatTime,
                     sender = myIdentifier,
@@ -1322,14 +1411,17 @@ RegisterNUICallback('SendMessage', function(data, cb)
         ReorganizeChats(NumberKey)
     end
 
+    -- PENTING: Update UI Langsung tanpa menunggu server (Optimistic Update)
+    -- Ini memastikan chat MUNCUL seketika, meskipun teman offline
     ESX.TriggerServerCallback('qb-phone:server:GetContactPicture', function(Chat)
         SendNUIMessage({
             action = 'UpdateChat',
-            chatData = Chat,
+            chatData = PhoneData.Chats[GetKeyByNumber(ChatNumber)], -- Gunakan data lokal terbaru
             chatNumber = ChatNumber,
         })
     end, PhoneData.Chats[GetKeyByNumber(ChatNumber)])
-    cb('ok')
+    
+    cb({})
 end)
 
 local function SaveToInternalGallery()
@@ -1342,17 +1434,32 @@ RegisterNUICallback('TakePhoto', function(_, cb)
     SetNuiFocus(false, false)
     CreateMobilePhone(1)
     CellCamActivate(true, true)
+    
     local takePhoto = true
+    local showInstructions = true -- 1. Variabel kontrol untuk instruksi
+
     while takePhoto do
-        if IsControlJustPressed(1, 27) then -- Toogle Mode
+        -- 2. Tampilkan instruksi HANYA jika showInstructions bernilai true
+        if showInstructions then
+            SetTextComponentFormat("STRING")
+            AddTextComponentString("~INPUT_CELLPHONE_SELECT~ Foto ~n~~INPUT_CELLPHONE_CANCEL~ Kembali ~n~~INPUT_PHONE~ Ganti Kamera")
+            DisplayHelpTextFromStringLabel(0, 0, 1, -1)
+        end
+
+        if IsControlJustPressed(1, 27) then -- Toogle Mode (Panah Atas)
             frontCam = not frontCam
             CellFrontCamActivate(frontCam)
-        elseif IsControlJustPressed(1, 177) then -- CANCEL
+        elseif IsControlJustPressed(1, 177) then -- CANCEL (Backspace/Klik Kanan)
             DestroyMobilePhone()
             CellCamActivate(false, false)
             cb(json.encode({ url = nil }))
             break
-        elseif IsControlJustPressed(1, 176) then -- TAKE.. PIC
+        elseif IsControlJustPressed(1, 176) then -- TAKE PIC (Enter/Klik Kiri)
+            
+            -- 3. Matikan instruksi segera saat tombol ditekan
+            showInstructions = false 
+            ClearAllHelpMessages() -- Hapus teks paksa agar bersih saat difoto
+
             if Config.Fivemerr == true then
                 return ESX.TriggerServerCallback('qb-phone:server:UploadToFivemerr', function(fivemerrData)
                     if fivemerrData == nil then
@@ -1374,7 +1481,9 @@ RegisterNUICallback('TakePhoto', function(_, cb)
 
             ESX.TriggerServerCallback('qb-phone:server:GetWebhook', function(hook)
                 if not hook then
-                    ESX.ShowNotification('Camera not setup')
+                    ESX.ShowNotification('Camera not setup', 'error')
+                    -- Kembalikan instruksi jika error
+                    showInstructions = true 
                     return
                 end
 
@@ -1391,6 +1500,8 @@ RegisterNUICallback('TakePhoto', function(_, cb)
                 end)
             end)
         end
+        
+        -- Sembunyikan HUD saat kamera aktif
         HideHudComponentThisFrame(7)
         HideHudComponentThisFrame(8)
         HideHudComponentThisFrame(9)
@@ -1591,18 +1702,32 @@ RegisterNetEvent('qb-phone:client:UpdateAdvertsDel', function(Adverts)
     })
 end)
 
-RegisterNetEvent('qb-phone:client:UpdateAdverts', function(Adverts, LastAd)
-    PhoneData.Adverts = Adverts
+RegisterNetEvent('qb-phone:client:UpdateAdverts', function(NewAdverts, LastAdName)
+    -- Update data lokal
+    PhoneData.Adverts = NewAdverts
+
+    -- Kirim Notifikasi (Opsional, matikan jika mengganggu)
     SendNUIMessage({
         action = 'PhoneNotification',
         PhoneNotify = {
             title = 'Advertisement',
-            text = 'A new ad has been posted by ' .. LastAd,
+            text = 'New Ad by ' .. LastAdName,
             icon = 'fas fa-ad',
             color = '#ff8f1a',
             timeout = 2500,
         },
     })
+
+    -- Refresh List di HP
+    SendNUIMessage({
+        action = 'RefreshAdverts',
+        Adverts = PhoneData.Adverts
+    })
+end)
+
+-- Event saat iklan dihapus
+RegisterNetEvent('qb-phone:client:UpdateAdvertsDel', function(NewAdverts)
+    PhoneData.Adverts = NewAdverts
     SendNUIMessage({
         action = 'RefreshAdverts',
         Adverts = PhoneData.Adverts
@@ -2083,6 +2208,32 @@ RegisterNetEvent('qb-phone:client:CustomNotification', function(title, text, ico
             color = color,
             timeout = timeout,
         },
+    })
+end)
+
+-- Tambahkan ini di client.lua
+RegisterNetEvent('qb-phone:client:UpdateMetaData', function(newMetaData)
+    -- 1. Update variable lokal
+    PhoneData.MetaData = newMetaData
+    
+    -- 2. Update data PlayerData
+    local PlayerData = ESX.GetPlayerData()
+    PlayerData.metadata = newMetaData -- Sync ke ESX PlayerData jika perlu
+
+    -- 3. Kirim data baru ke Javascript (NUI)
+    SendNUIMessage({
+        action = 'UpdateMetaData', -- Pastikan JS kamu menangani action ini
+        MetaData = PhoneData.MetaData
+    })
+    
+    -- Opsional: Force reload background/frame di UI
+    SendNUIMessage({
+        action = 'LoadPhoneData',
+        PhoneData = PhoneData,
+        PlayerData = PhoneData.PlayerData,
+        PlayerJob = PhoneData.PlayerData.job,
+        applications = Config.PhoneApplications,
+        PlayerId = GetPlayerServerId(PlayerId())
     })
 end)
 

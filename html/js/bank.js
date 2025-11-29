@@ -47,34 +47,40 @@ $(document).on('click', '.bank-app-header-button', function(e){
 })
 
 QB.Phone.Functions.DoBankOpen = function() {
-    // --- BAGIAN PERBAIKAN START ---
-    // 1. Cek apakah PlayerData.money ada? Jika tidak, buat object kosong
-    if (!QB.Phone.Data.PlayerData.money) {
-        QB.Phone.Data.PlayerData.money = {};
-    }
-
-    // 2. Cek apakah bank ada? Jika tidak, set ke 0
-    if (typeof QB.Phone.Data.PlayerData.money.bank === 'undefined' || QB.Phone.Data.PlayerData.money.bank === null) {
-        QB.Phone.Data.PlayerData.money.bank = 0;
-    }
-
-    // 3. Pastikan formatnya angka sebelum di-toFixed
-    var currentBalance = parseFloat(QB.Phone.Data.PlayerData.money.bank);
-    QB.Phone.Data.PlayerData.money.bank = currentBalance.toFixed(0);
-    
-    // 4. Handle charinfo account (nomor rekening)
+    // --- FIX SALDO TIDAK MUNCUL START ---
+    var currentBalance = 0;
     var accountNum = "Unknown";
-    if (QB.Phone.Data.PlayerData.charinfo && QB.Phone.Data.PlayerData.charinfo.account) {
-        accountNum = QB.Phone.Data.PlayerData.charinfo.account;
-    } else if (QB.Phone.Data.PlayerData.charinfo && QB.Phone.Data.PlayerData.charinfo.phone) {
-        // Fallback ke nomor hp jika tidak ada nomor rekening (ESX style)
-        accountNum = QB.Phone.Data.PlayerData.charinfo.phone; 
+
+    // Cek apakah objek PlayerData ada
+    if (QB.Phone.Data.PlayerData) {
+        // Cek apakah properti money ada
+        if (QB.Phone.Data.PlayerData.money) {
+            // Ambil saldo bank, jika undefined atau null, set ke 0
+            var bankVal = QB.Phone.Data.PlayerData.money.bank;
+            if (bankVal !== undefined && bankVal !== null) {
+                currentBalance = Number(bankVal); // Paksa jadi number
+            }
+        }
+
+        // Cek nomor rekening (Fallback ke nomor hp jika tidak ada)
+        if (QB.Phone.Data.PlayerData.charinfo) {
+            if (QB.Phone.Data.PlayerData.charinfo.account) {
+                accountNum = QB.Phone.Data.PlayerData.charinfo.account;
+            } else if (QB.Phone.Data.PlayerData.charinfo.phone) {
+                accountNum = QB.Phone.Data.PlayerData.charinfo.phone;
+            }
+        }
     }
-    // --- BAGIAN PERBAIKAN END ---
+    
+    // Pastikan tidak NaN (Not a Number)
+    if (isNaN(currentBalance)) {
+        currentBalance = 0;
+    }
+    // --- FIX SALDO TIDAK MUNCUL END ---
 
     $(".bank-app-account-number").val(accountNum);
-    $(".bank-app-account-balance").html("&#36; "+QB.Phone.Data.PlayerData.money.bank);
-    $(".bank-app-account-balance").data('balance', QB.Phone.Data.PlayerData.money.bank);
+    $(".bank-app-account-balance").html("&#36; " + currentBalance.toFixed(0));
+    $(".bank-app-account-balance").data('balance', currentBalance.toFixed(0));
 
     $(".bank-app-loaded").css({"display":"none", "padding-left":"30vh"});
     $(".bank-app-accounts").css({"left":"30vh"});
@@ -125,7 +131,7 @@ $(document).on('click', '#accept-transfer', function(e){
     var amountData = $(".bank-app-account-balance").data('balance');
 
     if (iban != "" && amount != "") {
-            $.post('https://qb-phone/CanTransferMoney', JSON.stringify({
+            $.post('https://phone/CanTransferMoney', JSON.stringify({
                 sendTo: iban,
                 amountOf: amount,
             }), function(data){
@@ -163,7 +169,7 @@ $(document).on('click', '.pay-invoice', function(event){
     var BankBalance = $(".bank-app-account-balance").data('balance');
 
     if (BankBalance >= InvoiceData.amount) {
-        $.post('https://qb-phone/PayInvoice', JSON.stringify({
+        $.post('https://phone/PayInvoice', JSON.stringify({
             sender: InvoiceData.sender,
             amount: InvoiceData.amount,
             society: InvoiceData.society,
@@ -197,7 +203,7 @@ $(document).on('click', '.decline-invoice', async function(event) {
     var InvoiceId = $(this).parent().parent().parent().attr('id');
     var InvoiceData = $("#"+InvoiceId).data('invoicedata');
 
-    const resp = await $.post('https://qb-phone/DeclineInvoice', JSON.stringify({
+    const resp = await $.post('https://phone/DeclineInvoice', JSON.stringify({
         sender: InvoiceData.sender,
         amount: InvoiceData.amount,
         society: InvoiceData.society,

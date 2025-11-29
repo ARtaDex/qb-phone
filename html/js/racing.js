@@ -120,21 +120,21 @@ $(document).on('click', '#join-race', function(e){
     var RaceId = $(this).parent().parent().attr('id');
     var Data = $("#"+RaceId).data('RaceData');
 
-    $.post('https://qb-phone/IsInRace', JSON.stringify({}), function(IsInRace){
+    $.post('https://phone/IsInRace', JSON.stringify({}), function(IsInRace){
         if (!IsInRace) {
-            $.post('https://qb-phone/RaceDistanceCheck', JSON.stringify({
+            $.post('https://phone/RaceDistanceCheck', JSON.stringify({
                 RaceId: Data.RaceId,
                 Joined: true,
             }), function(InDistance){
                 if (InDistance) {
-                    $.post('https://qb-phone/IsBusyCheck', JSON.stringify({
+                    $.post('https://phone/IsBusyCheck', JSON.stringify({
                         check: "editor"
                     }), function(IsBusy){
                         if (!IsBusy) {
-                            $.post('https://qb-phone/JoinRace', JSON.stringify({
+                            $.post('https://phone/JoinRace', JSON.stringify({
                                 ...Data
                             }));
-                            $.post('https://qb-phone/GetAvailableRaces', JSON.stringify({}), function(Races){
+                            $.post('https://phone/GetAvailableRaces', JSON.stringify({}), function(Races){
                                 SetupRaces(Races);
                             });
                         } else {
@@ -155,11 +155,11 @@ $(document).on('click', '#quit-race', function(e){
     var RaceId = $(this).parent().parent().attr('id');
     var Data = $("#"+RaceId).data('RaceData');
 
-    $.post('https://qb-phone/LeaveRace', JSON.stringify({
+    $.post('https://phone/LeaveRace', JSON.stringify({
         RaceData: Data,
     }));
 
-    $.post('https://qb-phone/GetAvailableRaces', JSON.stringify({}), function(Races){
+    $.post('https://phone/GetAvailableRaces', JSON.stringify({}), function(Races){
         SetupRaces(Races);
     });
 });
@@ -171,11 +171,11 @@ $(document).on('click', '#start-race', function(e){
     var RaceId = $(this).parent().parent().attr('id');
     var Data = $("#"+RaceId).data('RaceData');
 
-    $.post('https://qb-phone/StartRace', JSON.stringify({
+    $.post('https://phone/StartRace', JSON.stringify({
         RaceData: Data,
     }));
 
-    $.post('https://qb-phone/GetAvailableRaces', JSON.stringify({}), function(Races){
+    $.post('https://phone/GetAvailableRaces', JSON.stringify({}), function(Races){
         SetupRaces(Races);
     });
 });
@@ -200,7 +200,7 @@ $('.dropdown').focusout(function () {
     $(this).find('.dropdown-menu').slideUp(300);
 });
 $(document).on('click', '.dropdown .dropdown-menu li', function(e) {
-    $.post('https://qb-phone/GetTrackData', JSON.stringify({
+    $.post('https://phone/GetTrackData', JSON.stringify({
         RaceId: $(this).attr('id')
     }), function(TrackData){
         if ((TrackData.CreatorData.charinfo.lastname).length > 8) {
@@ -236,7 +236,7 @@ $(document).on('click', '#setup-race', function(e){
         left: 0
     }, 300);
 
-    $.post('https://qb-phone/GetRaces', JSON.stringify({}), function(Races){
+    $.post('https://phone/GetRaces', JSON.stringify({}), function(Races){
         if (Races !== undefined && Races !== null) {
             $(".dropdown-menu").html("");
             $.each(Races, function(i, race){
@@ -251,10 +251,10 @@ $(document).on('click', '#setup-race', function(e){
 
 $(document).on('click', '#create-race', function(e){
     e.preventDefault();
-    $.post('https://qb-phone/IsAuthorizedToCreateRaces', JSON.stringify({}), function(data){
+    $.post('https://phone/IsAuthorizedToCreateRaces', JSON.stringify({}), function(data){
         if (data.IsAuthorized) {
             if (!data.IsBusy) {
-                $.post('https://qb-phone/IsBusyCheck', JSON.stringify({
+                $.post('https://phone/IsBusyCheck', JSON.stringify({
                     check: "race"
                 }), function(InRace){
                     if (!InRace) {
@@ -282,12 +282,12 @@ $(document).on('click', '#racing-create-accept', function(e){
             ALLOWED_ATTR: []
         });
         if (TrackName == '') TrackName = 'What are you trying?'
-        $.post('https://qb-phone/IsAuthorizedToCreateRaces', JSON.stringify({
+        $.post('https://phone/IsAuthorizedToCreateRaces', JSON.stringify({
             TrackName: TrackName
         }), function(data){
             if (data.IsAuthorized) {
                 if (data.IsNameAvailable) {
-                    $.post('https://qb-phone/StartTrackEditor', JSON.stringify({
+                    $.post('https://phone/StartTrackEditor', JSON.stringify({
                         TrackName: TrackName
                     }));
                     $(".racing-create").fadeOut(200, function(){
@@ -318,18 +318,18 @@ $(document).on('click', '#setup-race-accept', function(e){
     var track = $('.dropdown').find('input').attr('value');
     var laps = $(".racing-setup-laps").val();
 
-    $.post('https://qb-phone/HasCreatedRace', JSON.stringify({}), function(HasCreatedRace){
+    $.post('https://phone/HasCreatedRace', JSON.stringify({}), function(HasCreatedRace){
         if (!HasCreatedRace) {
-            $.post('https://qb-phone/RaceDistanceCheck', JSON.stringify({
+            $.post('https://phone/RaceDistanceCheck', JSON.stringify({
                 RaceId: track,
                 Joined: false,
             }), function(InDistance){
                 if (InDistance) {
                     if (track !== undefined || track !== null) {
                         if (laps !== "") {
-                            $.post('https://qb-phone/CanRaceSetup', JSON.stringify({}), function(CanSetup){
+                            $.post('https://phone/CanRaceSetup', JSON.stringify({}), function(CanSetup){
                                 if (CanSetup) {
-                                    $.post('https://qb-phone/SetupRace', JSON.stringify({
+                                    $.post('https://phone/SetupRace', JSON.stringify({
                                         RaceId: track,
                                         AmountOfLaps: laps,
                                     }))
@@ -427,7 +427,7 @@ $(document).on('click', '.racing-leaderboards-button', function(e){
 $(document).on('click', '#leaderboards-race', function(e){
     e.preventDefault();
 
-    $.post('https://qb-phone/GetRacingLeaderboards', JSON.stringify({}), function(Races){
+    $.post('https://phone/GetRacingLeaderboards', JSON.stringify({}), function(Races){
         if (Races !== null) {
             $(".racing-leaderboards").html("");
             $.each(Races, function(i, race){

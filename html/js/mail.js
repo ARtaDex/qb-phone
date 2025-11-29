@@ -31,7 +31,7 @@ $(document).on('click', '.mail-back', function(e){
 $(document).on('click', '#accept-mail', function(e){
     e.preventDefault();
     var MailData = $("#"+OpenedMail).data('MailData');
-    $.post('https://qb-phone/AcceptMailButton', JSON.stringify({
+    $.post('https://phone/AcceptMailButton', JSON.stringify({
         buttonEvent: MailData.button.buttonEvent,
         buttonData: MailData.button.buttonData,
         mailId: MailData.mailid,
@@ -47,7 +47,7 @@ $(document).on('click', '#accept-mail', function(e){
 $(document).on('click', '#remove-mail', function(e){
     e.preventDefault();
     var MailData = $("#"+OpenedMail).data('MailData');
-    $.post('https://qb-phone/RemoveMail', JSON.stringify({
+    $.post('https://phone/RemoveMail', JSON.stringify({
         mailId: MailData.mailid
     }));
     $(".mail-home").animate({
@@ -143,7 +143,7 @@ $(document).on('click','.advimage', function (){
 
 $(document).on('click','#new-advert-photo',function(e){
     e.preventDefault();
-    $.post('https://qb-phone/TakePhoto',function(url){
+    $.post('https://phone/TakePhoto',function(url){
         if(url){
             $('#advert-new-url').val(url)
         }
@@ -175,12 +175,12 @@ $(document).on('click', '#new-advert-submit', function(e){
             left: -30+"vh"
         });
         if (!picture){
-            $.post('https://qb-phone/PostAdvert', JSON.stringify({
+            $.post('https://phone/PostAdvert', JSON.stringify({
                 message: Advert,
                 url: null
             }));
         }else {
-            $.post('https://qb-phone/PostAdvert', JSON.stringify({
+            $.post('https://phone/PostAdvert', JSON.stringify({
                 message: Advert,
                 url: picture
             }));
@@ -193,29 +193,79 @@ $(document).on('click', '#new-advert-submit', function(e){
 });
 
 QB.Phone.Functions.RefreshAdverts = function(Adverts) {
-    $("#advert-header-name").html("@"+QB.Phone.Data.PlayerData.charinfo.firstname+""+QB.Phone.Data.PlayerData.charinfo.lastname+" | "+QB.Phone.Data.PlayerData.charinfo.phone);
-    if (Adverts.length > 0 || Adverts.length == undefined) {
+    // 1. Safe Check Data Player (Mencegah Error jika data belum siap)
+    var firstName = "Guest";
+    var lastName = "User";
+    var phoneNumber = "00000";
+
+    if (QB.Phone.Data.PlayerData && QB.Phone.Data.PlayerData.charinfo) {
+        firstName = QB.Phone.Data.PlayerData.charinfo.firstname || "Guest";
+        lastName = QB.Phone.Data.PlayerData.charinfo.lastname || "User";
+        phoneNumber = QB.Phone.Data.PlayerData.charinfo.phone || "00000";
+    }
+
+    $("#advert-header-name").html("@" + firstName + " " + lastName + " | " + phoneNumber);
+
+    // 2. Cek Jumlah Iklan (Support Array & Object)
+    // Ini memperbaiki masalah list tidak muncul
+    var advertCount = 0;
+    if (Adverts) {
+        if (Array.isArray(Adverts)) {
+            advertCount = Adverts.length;
+        } else {
+            // Jika Object/Dictionary, hitung keys-nya
+            advertCount = Object.keys(Adverts).length;
+        }
+    }
+
+    if (advertCount > 0) {
         $(".advert-list").html("");
-        $.each(Adverts, function(i, advert){
-            var clean = DOMPurify.sanitize(advert.message , {
-                ALLOWED_TAGS: [],
-                ALLOWED_ATTR: []
-            });
+$.each(Adverts, function(i, advert){
+    // Skip jika data kosong
+    if (!advert) return;
 
-            if (clean == '') { clean = 'I\'m a silly goose :/' }
+    var clean = DOMPurify.sanitize(advert.message , {
+        ALLOWED_TAGS: [],
+        ALLOWED_ATTR: []
+    });
 
-            if (advert.url) {
-                var element = `<div class="advert"><span class="advert-sender">${advert.name} | ${advert.number}</span><p>${clean}</p></br><img class="advimage" src=`+advert.url +` style=" border-radius:4px; width: 95%; position:relative; z-index: 1; right:1px;height: auto; bottom:1vh;"></br><span><div class="adv-icon"></div> </span></div>`;
-            } else {
-                var element = `<div class="advert"><span class="advert-sender">${advert.name} | ${advert.number}</span><p>${clean}</p></div>`;
-            }
+    if (clean == '') { clean = 'I\'m a silly goose :/' }
 
-            $(".advert-list").append(element);
+    var element;
+    
+    // --- PERBAIKAN GAMBAR DI SINI ---
+    if (advert.url && advert.url !== "") {
+        // Perhatikan tanda kutip pada src="${advert.url}"
+        element = `
+        <div class="advert">
+            <span class="advert-sender">${advert.name} | ${advert.number}</span>
+            <p>${clean}</p>
+            <br>
+            <img class="advimage" src="${advert.url}" style="border-radius:4px; width: 95%; position:relative; z-index: 1; margin-bottom:1vh;" onclick="QB.Screen.popUp('${advert.url}')">
+            <br>
+            <span><div class="adv-icon"></div></span>
+        </div>`;
+    } else {
+        element = `
+        <div class="advert">
+            <span class="advert-sender">${advert.name} | ${advert.number}</span>
+            <p>${clean}</p>
+        </div>`;
+    }
+    // -------------------------------
 
-            if (advert.number === QB.Phone.Data.PlayerData.charinfo.phone){
-                $(".advert").append('<i class="fas fa-trash"style="font-size: 1rem; right:0;" id="adv-delete"></i>')
-            }
-        });
+    $(".advert-list").append(element);
+
+    // Logika tombol hapus (tetap sama)
+    if (QB.Phone.Data.PlayerData.charinfo) {
+        var myPhone = String(QB.Phone.Data.PlayerData.charinfo.phone);
+        var advertPhone = String(advert.number);
+
+        if (myPhone === advertPhone){
+            $(".advert-list .advert:last").append('<i class="fas fa-trash" style="font-size: 1rem; position: absolute; right: 1vh; bottom: 1vh; cursor: pointer; color: white;" id="adv-delete"></i>');
+        }
+    }
+});
     } else {
         $(".advert-list").html("");
         var element = '<div class="advert"><span class="advert-sender">There are no advertisements yet!</span></div>';
@@ -225,7 +275,7 @@ QB.Phone.Functions.RefreshAdverts = function(Adverts) {
 
 $(document).on('click','#adv-delete',function(e){
     e.preventDefault();
-    $.post('https://qb-phone/DeleteAdvert', function(){
+    $.post('https://phone/DeleteAdvert', function(){
         setTimeout(function(){
             QB.Phone.Notifications.Add("fas fa-ad", "Advertisement", "The ad was deleted", "#ff8f1a", 2000);
         },400)

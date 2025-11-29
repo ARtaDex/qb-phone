@@ -56,6 +56,7 @@ local WebHook = 'https://discord.com/api/webhooks/1435292539044233330/l3C5pHwUG9
 local FivemerrApiToken = ''
 local bannedCharacters = { '%', '$', ';' }
 local TWData = {}
+local Adverts = {}
 
 -- Functions
 
@@ -185,6 +186,11 @@ exports('sendNewMailToOffline', sendNewMailToOffline)
 
 -- Callbacks
 
+-- Callback untuk mengambil semua iklan yang tersimpan di memori server
+ESX.RegisterServerCallback('qb-phone:server:GetAdverts', function(source, cb)
+    cb(Adverts)
+end)
+
 ESX.RegisterServerCallback("qb-phone:server:GetInvoices", function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
 
@@ -227,8 +233,7 @@ ESX.RegisterServerCallback('qb-phone:server:GetCallState', function(_, cb, Conta
 end)
 
 ESX.RegisterServerCallback('qb-phone:server:GetPhoneData', function(source, cb)
-    local src = source
-    local xPlayer = ESX.GetPlayerFromId(src)
+    local xPlayer = ESX.GetPlayerFromId(source)
     if xPlayer ~= nil then
         local PhoneData = {
             Applications = {},
@@ -242,10 +247,29 @@ ESX.RegisterServerCallback('qb-phone:server:GetPhoneData', function(source, cb)
             CryptoTransactions = {},
             Tweets = {},
             Images = {},
-            InstalledApps = {} -- ESX tidak punya metadata untuk installed apps secara default
+            InstalledApps = {},
+            MetaData = {} -- Inisialisasi MetaData
         }
-        PhoneData.Adverts = Adverts
 
+        -- 1. LOAD SETTINGAN DARI DB
+        local settingsResult = MySQL.scalar.await('SELECT phone_settings FROM users WHERE identifier = ?', { xPlayer.identifier })
+        
+        if settingsResult and settingsResult ~= '' then
+            -- Decode JSON dari database
+            local status, decoded = pcall(json.decode, settingsResult)
+            if status and decoded then
+                PhoneData.MetaData = decoded
+            else
+                PhoneData.MetaData = { profilepicture = "default", background = "default-qbcore" }
+            end
+        else
+            PhoneData.MetaData = { profilepicture = "default", background = "default-qbcore" }
+        end
+        
+        -- Pastikan iklan ter-load
+        PhoneData.Adverts = Adverts 
+
+        -- Load Data Lainnya (Sama seperti sebelumnya)
         local result = MySQL.query.await('SELECT * FROM player_contacts WHERE identifier = ? ORDER BY name ASC', { xPlayer.identifier })
         if result[1] ~= nil then
             for _, v in pairs(result) do
@@ -255,58 +279,29 @@ ESX.RegisterServerCallback('qb-phone:server:GetPhoneData', function(source, cb)
         end
 
         local garageresult = MySQL.query.await('SELECT * FROM owned_vehicles WHERE owner = ?', { xPlayer.identifier })
-        if garageresult[1] ~= nil then
-            PhoneData.Garage = garageresult
-        end
+        if garageresult[1] ~= nil then PhoneData.Garage = garageresult end
 
         local messages = MySQL.query.await('SELECT * FROM phone_messages WHERE identifier = ?', { xPlayer.identifier })
-        if messages ~= nil and next(messages) ~= nil then
-            PhoneData.Chats = messages
-        end
+        if messages ~= nil then PhoneData.Chats = messages end
 
-        if AppAlerts[xPlayer.identifier] ~= nil then
-            PhoneData.Applications = AppAlerts[xPlayer.identifier]
-        end
+        if AppAlerts[xPlayer.identifier] ~= nil then PhoneData.Applications = AppAlerts[xPlayer.identifier] end
+        if MentionedTweets[xPlayer.identifier] ~= nil then PhoneData.MentionedTweets = MentionedTweets[xPlayer.identifier] end
+        if Hashtags ~= nil then PhoneData.Hashtags = Hashtags end
 
-        if MentionedTweets[xPlayer.identifier] ~= nil then
-            PhoneData.MentionedTweets = MentionedTweets[xPlayer.identifier]
-        end
-
-        if Hashtags ~= nil and next(Hashtags) ~= nil then
-            PhoneData.Hashtags = Hashtags
-        end
-
-        local Tweets = MySQL.query.await('SELECT * FROM phone_tweets WHERE `date` > NOW() - INTERVAL ? hour', { 48 }) -- Config.TweetDuration diganti angka manual atau pastikan Config ada
-
-        if Tweets ~= nil and next(Tweets) ~= nil then
-            PhoneData.Tweets = Tweets
-            TWData = Tweets
-        end
+        local Tweets = MySQL.query.await('SELECT * FROM phone_tweets WHERE `date` > NOW() - INTERVAL ? hour', { 48 })
+        if Tweets ~= nil then PhoneData.Tweets = Tweets end
 
         local mails = MySQL.query.await('SELECT * FROM player_mails WHERE identifier = ? ORDER BY `date` ASC', { xPlayer.identifier })
         if mails[1] ~= nil then
             for k, _ in pairs(mails) do
-                if mails[k].button ~= nil then
-                    mails[k].button = json.decode(mails[k].button)
-                end
+                if mails[k].button ~= nil then mails[k].button = json.decode(mails[k].button) end
             end
             PhoneData.Mails = mails
         end
 
-        local transactions = MySQL.query.await('SELECT * FROM crypto_transactions WHERE identifier = ? ORDER BY `date` ASC', { xPlayer.identifier })
-        if transactions[1] ~= nil then
-            for _, v in pairs(transactions) do
-                PhoneData.CryptoTransactions[#PhoneData.CryptoTransactions + 1] = {
-                    TransactionTitle = v.title,
-                    TransactionMessage = v.message
-                }
-            end
-        end
-        
         local images = MySQL.query.await('SELECT * FROM phone_gallery WHERE identifier = ? ORDER BY `date` DESC', { xPlayer.identifier })
-        if images ~= nil and next(images) ~= nil then
-            PhoneData.Images = images
-        end
+        if images ~= nil then PhoneData.Images = images end
+        
         cb(PhoneData)
     end
 end)
@@ -537,16 +532,26 @@ ESX.RegisterServerCallback('qb-phone:server:CanTransferMoney', function(source, 
 end)
 
 ESX.RegisterServerCallback('qb-phone:server:GetCurrentLawyers', function(source, cb)
-    local Lawyers = {}
-    local xPlayers = ESX.GetExtendedPlayers('job', 'lawyer')
+    local Services = {}
+    local xPlayers = ESX.GetExtendedPlayers() -- Ambil semua pemain online
+
     for _, xPlayer in pairs(xPlayers) do
-        Lawyers[#Lawyers + 1] = {
-            name = xPlayer.getName(),
-            phone = xPlayer.get('phoneNumber'),
-            typejob = xPlayer.job.name
-        }
+        local jobName = xPlayer.job.name
+        
+        -- Daftar Job yang ingin ditampilkan di Service App
+        if jobName == 'police' or jobName == 'ambulance' or jobName == 'mechanic' or jobName == 'taxi' or jobName == 'lawyer' or jobName == 'realestate' or jobName == 'cardealer' then
+            
+            -- Masukkan ke list
+            table.insert(Services, {
+                id = xPlayer.source,
+                name = xPlayer.getName(),
+                phone = xPlayer.get('phoneNumber'),
+                typejob = xPlayer.job.label, -- Label (Misal: "Police Department")
+                job = jobName -- Nama teknis (Misal: "police") untuk penentuan ikon di JS
+            })
+        end
     end
-    cb(Lawyers)
+    cb(Services)
 end)
 
 ESX.RegisterServerCallback('qb-phone:server:GetWebhook', function(_, cb)
@@ -584,25 +589,50 @@ end)
 
 -- Events
 
+-- Pastikan variabel ini ada di bagian paling atas file (di bawah local QBPhone = {})
+-- local Adverts = {} <--- Cek baris atas server.lua, pastikan ini ada!
+
 RegisterNetEvent('qb-phone:server:AddAdvert', function(msg, url)
     local src = source
     local xPlayer = ESX.GetPlayerFromId(src)
-    local identifier = xPlayer.identifier
     
-    local advertData = {
-        message = msg,
-        name = '@' .. xPlayer.getName(),
-        number = xPlayer.get('phoneNumber'),
-        url = url
-    }
+    if xPlayer then
+        local identifier = xPlayer.identifier
+        
+        -- Ambil Nama (Fallback jika nil)
+        local name = xPlayer.getName() or "Unknown"
+        
+        -- Ambil Nomor HP (Fallback ke '00000')
+        local number = xPlayer.get('phoneNumber') or "00000"
 
-    if Adverts[identifier] ~= nil then
-        Adverts[identifier] = advertData
-    else
-        Adverts[identifier] = advertData
+        -- Simpan ke tabel Server
+        Adverts[identifier] = {
+            name = name,
+            number = number,
+            message = msg,
+            url = url
+        }
+
+        -- Kirim update ke SEMUA pemain (-1)
+        TriggerClientEvent('qb-phone:client:UpdateAdverts', -1, Adverts, name)
     end
+end)
+
+RegisterNetEvent('qb-phone:server:DeleteAdvert', function()
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
     
-    TriggerClientEvent('qb-phone:client:UpdateAdverts', -1, Adverts, '@' .. xPlayer.getName())
+    if xPlayer then
+        local identifier = xPlayer.identifier
+        
+        -- Hapus iklan milik identifier tersebut
+        if Adverts[identifier] then
+            Adverts[identifier] = nil
+        end
+        
+        -- Kirim update penghapusan ke SEMUA pemain
+        TriggerClientEvent('qb-phone:client:UpdateAdvertsDel', -1, Adverts)
+    end
 end)
 
 RegisterNetEvent('qb-phone:server:DeleteAdvert', function()
@@ -821,42 +851,59 @@ end)
 RegisterNetEvent('qb-phone:server:AddNewContact', function(name, number, iban)
     local src = source
     local xPlayer = ESX.GetPlayerFromId(src)
-    MySQL.insert('INSERT INTO player_contacts (identifier, name, number, iban) VALUES (?, ?, ?, ?)', { xPlayer.identifier, tostring(name), tostring(number), tostring(iban) })
+    
+    -- Pastikan data tidak kosong
+    if name and number then 
+        MySQL.insert('INSERT INTO player_contacts (identifier, name, number, iban) VALUES (?, ?, ?, ?)', {
+            xPlayer.identifier, 
+            tostring(name), 
+            tostring(number), 
+            tostring(iban) or "0"
+        })
+    end
 end)
 
-RegisterNetEvent('qb-phone:server:UpdateMessages', function(ChatMessages, ChatNumber, _)
+RegisterNetEvent('qb-phone:server:UpdateMessages', function(ChatMessages, ChatNumber, New)
     local src = source
-    local SenderData = ESX.GetPlayerFromId(src)
-    local SenderNumber = SenderData.get('phoneNumber')
+    local xPlayer = ESX.GetPlayerFromId(src)
+    local SenderIdentifier = xPlayer.identifier
+    local SenderNumber = xPlayer.get('phoneNumber')
     
-    -- Mencari Identifier Penerima berdasarkan Nomor HP
+    -- 1. Cari Identifier Penerima berdasarkan Nomor HP di Database
+    -- (Ini kuncinya: Kita cari di DB Users, jadi offline pun ketemu)
     local result = MySQL.query.await('SELECT identifier FROM users WHERE phone_number = ?', { ChatNumber })
     
     if result[1] ~= nil then
-        local TargetIdentifier = result[1].identifier
-        local TargetData = ESX.GetPlayerFromIdentifier(TargetIdentifier)
+        local ReceiverIdentifier = result[1].identifier
         
-        -- Logic update/insert DB disesuaikan dengan Identifier
-        local Chat = MySQL.query.await('SELECT * FROM phone_messages WHERE identifier = ? AND number = ?', { SenderData.identifier, ChatNumber })
-        
-        if Chat[1] ~= nil then
-             -- Update for target
-             MySQL.update('UPDATE phone_messages SET messages = ? WHERE identifier = ? AND number = ?', { json.encode(ChatMessages), TargetIdentifier, SenderNumber })
-             -- Update for sender
-             MySQL.update('UPDATE phone_messages SET messages = ? WHERE identifier = ? AND number = ?', { json.encode(ChatMessages), SenderData.identifier, ChatNumber })
-             
-             if TargetData then
-                 TriggerClientEvent('qb-phone:client:UpdateMessages', TargetData.source, ChatMessages, SenderNumber, false)
-             end
+        -- 2. SIMPAN KE DATABASE PENGIRIM (SAYA)
+        -- Agar chat tetap ada di HP kita walau teman offline
+        local checkSender = MySQL.query.await('SELECT * FROM phone_messages WHERE identifier = ? AND number = ?', { SenderIdentifier, ChatNumber })
+        if checkSender[1] then
+            MySQL.update('UPDATE phone_messages SET messages = ? WHERE identifier = ? AND number = ?', { json.encode(ChatMessages), SenderIdentifier, ChatNumber })
         else
-             -- Insert
-             MySQL.insert('INSERT INTO phone_messages (identifier, number, messages) VALUES (?, ?, ?)', { TargetIdentifier, SenderNumber, json.encode(ChatMessages) })
-             MySQL.insert('INSERT INTO phone_messages (identifier, number, messages) VALUES (?, ?, ?)', { SenderData.identifier, ChatNumber, json.encode(ChatMessages) })
-             
-             if TargetData then
-                 TriggerClientEvent('qb-phone:client:UpdateMessages', TargetData.source, ChatMessages, SenderNumber, true)
-             end
+            MySQL.insert('INSERT INTO phone_messages (identifier, number, messages) VALUES (?, ?, ?)', { SenderIdentifier, ChatNumber, json.encode(ChatMessages) })
         end
+
+        -- 3. SIMPAN KE DATABASE PENERIMA (TEMAN)
+        -- Agar chat masuk ke HP teman saat dia login nanti
+        local checkReceiver = MySQL.query.await('SELECT * FROM phone_messages WHERE identifier = ? AND number = ?', { ReceiverIdentifier, SenderNumber })
+        if checkReceiver[1] then
+            -- Jika sudah ada chat sebelumnya, kita update
+            -- Catatan: Idealnya kita merge message, tapi untuk simplifikasi replace json works karena client mengirim full history
+            MySQL.update('UPDATE phone_messages SET messages = ? WHERE identifier = ? AND number = ?', { json.encode(ChatMessages), ReceiverIdentifier, SenderNumber })
+        else
+            -- Jika chat baru bagi penerima
+            MySQL.insert('INSERT INTO phone_messages (identifier, number, messages) VALUES (?, ?, ?)', { ReceiverIdentifier, SenderNumber, json.encode(ChatMessages) })
+        end
+
+        -- 4. JIKA TEMAN ONLINE: Kirim notifikasi langsung (Realtime)
+        local xReceiver = ESX.GetPlayerFromIdentifier(ReceiverIdentifier)
+        if xReceiver then
+            TriggerClientEvent('qb-phone:client:UpdateMessages', xReceiver.source, ChatMessages, SenderNumber, New)
+        end
+    else
+        print("[PHONE ERROR] Nomor tujuan tidak ditemukan di database users: " .. ChatNumber)
     end
 end)
 
@@ -894,10 +941,13 @@ RegisterNetEvent('qb-phone:server:AnswerCall', function(CallData)
 end)
 
 RegisterNetEvent('qb-phone:server:SaveMetaData', function(MData)
-    -- ESX tidak menyimpan metadata phone di users, abaikan atau implementasikan custom column
-    -- local src = source
-    -- local xPlayer = ESX.GetPlayerFromId(src)
-    -- Custom Implementation Required
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    if xPlayer then
+        -- Encode table ke JSON string sebelum simpan ke DB
+        local jsonData = json.encode(MData)
+        MySQL.update('UPDATE users SET phone_settings = ? WHERE identifier = ?', { jsonData, xPlayer.identifier })
+    end
 end)
 
 RegisterNetEvent('qb-phone:server:GiveContactDetails', function(PlayerId)
@@ -995,20 +1045,18 @@ RegisterCommand('bill', function(source, args)
     end
 end)
 
--- =====================================================
--- PHONE NUMBER GENERATOR (SOLUSI AUTO GENERATE)
--- Tambahkan ini di bagian paling bawah server/main.lua
--- =====================================================
+-- ==============================================================================
+-- PHONE NUMBER SYSTEM (FIX 00000)
+-- Letakkan di paling bawah server/main.lua
+-- ==============================================================================
 
+-- 1. Fungsi Generator Nomor Unik
 local function GenerateUniquePhoneNumber()
     local running = true
     local phone = nil
     while running do
-        -- Format nomor HP (Contoh: 0812345678)
         local rand = math.random(10000000, 99999999)
         phone = "08" .. rand
-        
-        -- Cek apakah nomor sudah dipakai orang lain
         local count = MySQL.scalar.await('SELECT COUNT(*) FROM users WHERE phone_number = ?', { phone })
         if count == 0 then
             running = false
@@ -1017,24 +1065,192 @@ local function GenerateUniquePhoneNumber()
     return phone
 end
 
+-- 2. Event saat Player Login (Cek & Buat Nomor)
 RegisterNetEvent('esx:playerLoaded')
-AddEventHandler('esx:playerLoaded', function(player, xPlayer, isNew)
-    -- Ambil nomor hp saat ini
-    local currentNum = xPlayer.get('phoneNumber')
+AddEventHandler('esx:playerLoaded', function(source, xPlayer)
+    if not xPlayer then return end
+    
+    -- Cek nomor HP di Database langsung biar akurat
+    MySQL.scalar('SELECT phone_number FROM users WHERE identifier = ?', { xPlayer.identifier }, function(result)
+        if result == nil or result == '' then
+            -- Jika Kosong, Buat Baru
+            local newNum = GenerateUniquePhoneNumber()
+            MySQL.update('UPDATE users SET phone_number = ? WHERE identifier = ?', { newNum, xPlayer.identifier })
+            
+            -- Update xPlayer di memori server
+            xPlayer.set('phoneNumber', newNum)
+            print('[PHONE] Generated new number for ' .. xPlayer.getName() .. ': ' .. newNum)
+        else
+            -- Jika Ada, pastikan xPlayer tahu
+            xPlayer.set('phoneNumber', result)
+        end
+    end)
+end)
 
-    -- Jika nomor tidak ada (nil) atau kosong ('')
-    if currentNum == nil or currentNum == '' then
-        print('[INFO] Player ' .. xPlayer.getName() .. ' tidak punya nomor HP. Membuat nomor baru...')
+-- 3. Callback Khusus agar Client bisa minta nomor real-time
+ESX.RegisterServerCallback('qb-phone:server:GetMyNumber', function(source, cb)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if xPlayer then
+        -- Coba ambil dari cache ESX
+        local myNum = xPlayer.get('phoneNumber')
         
-        local newNum = GenerateUniquePhoneNumber()
-        
-        -- 1. Simpan ke Database
-        MySQL.update('UPDATE users SET phone_number = ? WHERE identifier = ?', { newNum, xPlayer.identifier }, function(affectedRows)
-            if affectedRows > 0 then
-                -- 2. Update data pemain yang sedang online agar tidak perlu relog
-                xPlayer.set('phoneNumber', newNum)
-                print('[SUCCESS] Nomor HP baru dibuat untuk ' .. xPlayer.getName() .. ': ' .. newNum)
-            end
-        end)
+        -- Jika cache gagal, ambil paksa dari Database
+        if myNum == nil or myNum == 0 or myNum == "0" then
+            MySQL.scalar('SELECT phone_number FROM users WHERE identifier = ?', { xPlayer.identifier }, function(result)
+                if result then
+                    xPlayer.set('phoneNumber', result) -- Update cache
+                    cb(result)
+                else
+                    -- Jika benar-benar tidak ada, generate sekarang juga
+                    local newNum = GenerateUniquePhoneNumber()
+                    MySQL.update('UPDATE users SET phone_number = ? WHERE identifier = ?', { newNum, xPlayer.identifier })
+                    xPlayer.set('phoneNumber', newNum)
+                    cb(newNum)
+                end
+            end)
+        else
+            cb(myNum)
+        end
+    else
+        cb("00000")
     end
 end)
+
+-- CALLBACK BARU: KHUSUS UNTUK LIST GARASI HP
+ESX.RegisterServerCallback('qb-phone:server:GetMyVehicles', function(source, cb)
+    local xPlayer = ESX.GetPlayerFromId(source)
+
+    if xPlayer then
+        -- Ambil hanya kendaraan milik player tersebut
+        MySQL.query('SELECT * FROM owned_vehicles WHERE owner = ?', { xPlayer.identifier }, function(result)
+            local vehicles = {}
+
+            if result then
+                for i=1, #result do
+                    local vehicleData = result[i]
+                    local props = json.decode(vehicleData.vehicle) -- Decode JSON kolom vehicle
+                    
+                    -- Coba ambil status (stored/state)
+                    local state = "Out"
+                    if vehicleData.stored == 1 or vehicleData.stored == true or vehicleData.state == 1 then
+                        state = "In Garage"
+                    end
+
+                    table.insert(vehicles, {
+                        plate = vehicleData.plate,
+                        garage = vehicleData.garage or "Public Garage", -- Nama garasi (jika ada kolomnya)
+                        state = state,
+                        -- Data mesin dari JSON props
+                        fuel = props.fuelLevel or 100,
+                        engine = props.engineHealth or 1000,
+                        body = props.bodyHealth or 1000,
+                        model = props.model, -- Hash/Model untuk dikirim ke client
+                        brand = "Car" -- Default
+                    })
+                end
+            end
+            
+            cb(vehicles)
+        end)
+    else
+        cb({})
+    end
+end)
+
+-- ==============================================================================
+-- CUSTOM PHONE NUMBER COMMAND
+-- Letakkan di bagian paling bawah server/main.lua
+-- ==============================================================================
+
+-- Command: /setphone [ID_Pemain] [Nomor_Baru]
+-- Contoh: /setphone 1 08123456789
+RegisterCommand('setphone', function(source, args, rawCommand)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+
+    -- 1. Cek Permission Admin (Sesuaikan dengan grup admin di server Anda)
+    if xPlayer.getGroup() ~= 'admin' and xPlayer.getGroup() ~= 'superadmin' then
+        TriggerClientEvent('esx:showNotification', src, 'Anda tidak memiliki izin.')
+        return
+    end
+
+    -- 2. Cek Input
+    local targetId = tonumber(args[1])
+    local newNumber = args[2]
+
+    if not targetId or not newNumber then
+        TriggerClientEvent('esx:showNotification', src, 'Format: /setphone [ID] [Nomor_Baru]')
+        return
+    end
+
+    local targetPlayer = ESX.GetPlayerFromId(targetId)
+    if not targetPlayer then
+        TriggerClientEvent('esx:showNotification', src, 'Pemain tidak ditemukan.')
+        return
+    end
+
+    -- 3. Cek apakah nomor sudah dipakai orang lain di Database
+    MySQL.scalar('SELECT COUNT(*) FROM users WHERE phone_number = ?', { newNumber }, function(count)
+        if count > 0 then
+            TriggerClientEvent('esx:showNotification', src, 'Nomor ' .. newNumber .. ' sudah digunakan orang lain!')
+        else
+            -- 4. Update Database
+            MySQL.update('UPDATE users SET phone_number = ? WHERE identifier = ?', { newNumber, targetPlayer.identifier }, function(affected)
+                if affected > 0 then
+                    -- 5. Update Cache Pemain (PENTING: Agar HP langsung baca tanpa relog)
+                    targetPlayer.set('phoneNumber', newNumber)
+                    
+                    -- Notifikasi Sukses
+                    TriggerClientEvent('esx:showNotification', src, 'Berhasil mengubah nomor ' .. targetPlayer.getName() .. ' menjadi: ' .. newNumber)
+                    TriggerClientEvent('esx:showNotification', targetId, 'Nomor HP Anda telah diubah menjadi: ' .. newNumber)
+                    
+                    -- 6. Refresh HP Target (Opsional, agar UI update)
+                    -- Script HP kita sudah otomatis refresh saat dibuka (OpenPhone), jadi aman.
+                else
+                    TriggerClientEvent('esx:showNotification', src, 'Gagal update database.')
+                end
+            end)
+        end
+    end)
+end, false)
+
+-- ==============================================================
+-- COMMAND GANTI FRAME HP
+-- Usage: /setframe [nama_frame]
+-- Contoh: /setframe iphone_silver
+-- ==============================================================
+RegisterCommand('setframe', function(source, args)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
+    local newFrame = args[1]
+
+    if not newFrame then
+        TriggerClientEvent('esx:showNotification', src, 'Format: /setframe [nama_frame]')
+        return
+    end
+
+    -- 1. Ambil Data Settings Saat Ini dari Database
+    MySQL.scalar('SELECT phone_settings FROM users WHERE identifier = ?', { xPlayer.identifier }, function(result)
+        local metaData = {}
+        
+        -- Jika ada data, decode JSON-nya. Jika kosong, buat table baru.
+        if result and result ~= '' then
+            metaData = json.decode(result) or {}
+        else
+            metaData = { 
+                profilepicture = "default", 
+                background = "default-qbcore" 
+            }
+        end
+
+        -- 2. Update Bagian Frame
+        metaData.frame = newFrame
+
+        -- 3. Simpan Kembali ke Database
+        MySQL.update('UPDATE users SET phone_settings = ? WHERE identifier = ?', { json.encode(metaData), xPlayer.identifier }, function()
+            -- 4. Kirim Update ke Client agar HP langsung berubah
+            TriggerClientEvent('qb-phone:client:UpdateMetaData', src, metaData)
+            TriggerClientEvent('esx:showNotification', src, 'Frame HP diganti menjadi: ' .. newFrame)
+        end)
+    end)
+end, false) -- Set 'true' jika ingin command ini hanya untuk admin
